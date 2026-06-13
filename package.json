@@ -1,0 +1,81 @@
+{
+  "name": "vscode-mermaid-visual-editor",
+  "displayName": "Markdown マーメイドビジュアルエディタ",
+  "description": "Mermaid記法の図をリアルタイムプレビュー・編集するVS Code拡張機能",
+  "version": "1.4.0",
+  "publisher": "Hashi-Kazu",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Hashi-Kazu/vscode-mermaid-visual-editor"
+  },
+  "license": "MIT",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#12121E",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other", "Visualization"],
+  "keywords": ["mermaid", "diagram", "gantt", "editor", "visualization"],
+  "activationEvents": [
+    "onLanguage:markdown"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "snippets": [
+      {
+        "language": "markdown",
+        "path": "./snippets/mermaid.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "mermaid.openGantt",
+        "title": "Ganttエディタを開く",
+        "category": "Mermaid",
+        "icon": {
+          "light": "media/icon.png",
+          "dark": "media/icon.png"
+        }
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "mermaid.openGantt",
+          "when": "editorLangId == markdown",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "mermaid.openGantt",
+          "when": "resourceExtname == .md",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "mermaid.openGantt",
+        "key": "ctrl+shift+g",
+        "mac": "cmd+shift+g",
+        "when": "editorLangId == markdown"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "node esbuild.js --production",
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.3.0"
+  }
+}

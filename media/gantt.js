@@ -1,0 +1,1411 @@
+(function () {
+  'use strict';
+
+  // eslint-disable-next-line no-undef
+  const vscode = acquireVsCodeApi();
+
+  /* ── Constants ── */
+  const LABEL_W      = 200;
+  const ROW_H        = 36;
+  const SECTION_H    = 28;
+  const HEADER_H     = 56;
+  const BAR_H        = 24;
+  const BAR_TOP      = (ROW_H - BAR_H) / 2;
+  const DIAMOND_SIZE = BAR_H;
+  const MIN_PPD      = 7;
+  const MAX_PPD      = 60;
+  const DEF_PPD      = 24;
+  const RESIZE_W     = 8;
+  const DRAG_THRESH  = 4;   // px before drag starts
+  const PAD_DAYS     = 7;
+  const UNDO_LIMIT   = 50;
+
+  /* ── State ── */
+  let ganttData    = null;
+  let undoStack    = [];
+  let dragState    = null;
+  let editingEl    = null;
+  let pxPerDay     = DEF_PPD;
+  let rangeStart   = null;
+  let panState     = null;
+  let reorderState = null;
+  let rowIndex     = [];
+  let autoFitPpd   = true;
+  let deleteTarget = null;  // { si, ti } — ti=-1 means section
+  const collapsedSections = new Set();
+
+  /* ── Date helpers ── */
+  const parseDate = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d); };
+  const fmtDate   = d => `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`;
+  const p2        = n => String(n).padStart(2,'0');
+
+  function addDays(dateStr, n) {
+    const d = parseDate(dateStr);
+    d.setDate(d.getDate() + Math.round(n));
+    return fmtDate(d);
+  }
+  function diffDays(a, b) {
+    return Math.round((parseDate(b) - parseDate(a)) / 86400000);
+  }
+
+  /* ── Dependency helpers ── */
+  function resolveAfterIds() {
+    if (!ganttData) return;
+    const endById = new Map();
+    ganttData.sections.forEach(s => s.tasks.forEach(t => {
+      if (t.id) endById.set(t.id, addDays(t.startDate, t.duration || 0));
+    }));
+    ganttData.sections.forEach(s => s.tasks.forEach(t => {
+      if (t.afterId) {
+        const end = endById.get(t.afterId);
+        if (end) t.startDate = end;
+      }
+    }));
+  }
+
+  function findTaskById(id) {
+    for (const sec of ganttData.sections) {
+      for (const task of sec.tasks) {
+        if (task.id === id) return task;
+      }
+    }
+    return null;
+  }
+
+  function generateTaskId() {
+    const existing = new Set();
+    ganttData.sections.forEach(s => s.tasks.forEach(t => { if (t.id) existing.add(t.id); }));
+    let n = 1;
+    while (existing.has('t' + n)) n++;
+    return 't' + n;
+  }
+
+  function hasAnyAfterIds() {
+    return ganttData.sections.some(s => s.tasks.some(t => t.afterId));
+  }
+
+  /* ── Layout helpers ── */
+  function calcRange(data) {
+    let min = null, max = null;
+    data.sections.forEach(s => s.tasks.forEach(t => {
+      const st = parseDate(t.startDate);
+      const en = new Date(st); en.setDate(en.getDate() + (t.duration || 0));
+      if (!min || st < min) min = new Date(st);
+      if (!max || en > max) max = new Date(en);
+      if (!max || st > max) max = new Date(st);
+    }));
+    if (!min) { min = new Date(); max = new Date(); max.setDate(max.getDate() + 30); }
+    min.setDate(min.getDate() - PAD_DAYS);
+    max.setDate(max.getDate() + PAD_DAYS);
+    return { min, max };
+  }
+
+  function dateToX(dateStr) {
+    return diffDays(fmtDate(rangeStart), dateStr) * pxPerDay;
+  }
+
+  /* ── DOM helper ── */
+  function el(tag, cls) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    return e;
+  }
+
+  /* ── Render ── */
+  function render() {
+    if (!ganttData) return;
+    finishEdit(false);
+    rowIndex = [];
+
+    const container = document.getElementById('scroll-container');
+    const scrollLeft = container.scrollLeft;
+    const scrollTop  = container.scrollTop;
+
+    const grid = document.getElementById('gantt-grid');
+    grid.innerHTML = '';
+
+    const { min, max } = calcRange(ganttData);
+    rangeStart = min;
+    const totalDays = diffDays(fmtDate(min), fmtDate(max));
+    if (autoFitPpd) {
+      const avail = container.clientWidth - LABEL_W;
+      pxPerDay = Math.max(MIN_PPD, avail > 0 ? Math.min(DEF_PPD, avail / totalDays) : DEF_PPD);
+      autoFitPpd = false;
+    }
+    const tlW = Math.ceil(totalDays * pxPerDay);
+    grid.style.setProperty('--cell-w', pxPerDay + 'px');
+
+    renderHeader(grid, min, max, tlW);
+    ganttData.sections.forEach((sec, si) => {
+      if (sec.name) renderSection(grid, sec, si, tlW);
+      if (!collapsedSections.has(si)) {
+        sec.tasks.forEach((task, ti) => renderTask(grid, task, si, ti, tlW));
+      }
+    });
+
+    container.scrollLeft = scrollLeft;
+    container.scrollTop  = scrollTop;
+    drawDependencyArrows();
+  }
+
+  /* ── Header ── */
+  function renderHeader(grid, min, max, tlW) {
+    const corner = el('div', 'gantt-cell gantt-label gantt-corner');
+    corner.textContent = ganttData.title || 'Gantt';
+    corner.title = 'ダブルクリックでタイトルを編集';
+    corner.addEventListener('dblclick', () => startTitleEdit(corner));
+    grid.appendChild(corner);
+
+    const tlHeader = el('div', 'gantt-cell gantt-header-timeline');
+    tlHeader.style.width = tlW + 'px';
+    const monthRow = el('div', 'month-row');
+    const dayRow   = el('div', 'day-row');
+
+    let cur = new Date(min);
+    const end = new Date(max);
+    let curMonthEl = null, curMonthDays = 0;
+    const todayStr = fmtDate(new Date());
+
+    while (cur < end) {
+      if (!curMonthEl || cur.getDate() === 1) {
+        if (curMonthEl) curMonthEl.style.width = (curMonthDays * pxPerDay) + 'px';
+        curMonthEl = el('div', 'month-cell');
+        curMonthEl.textContent = `${cur.getFullYear()}/${p2(cur.getMonth()+1)}`;
+        monthRow.appendChild(curMonthEl);
+        curMonthDays = 0;
+      }
+      curMonthDays++;
+      const dayCell = el('div', 'day-cell');
+      dayCell.style.width = pxPerDay + 'px';
+      const dom = cur.getDate();
+      if (dom === 1 || dom % 5 === 0) dayCell.textContent = String(dom);
+      if (fmtDate(cur) === todayStr) dayCell.classList.add('today');
+      dayRow.appendChild(dayCell);
+      cur.setDate(cur.getDate() + 1);
+    }
+    if (curMonthEl) curMonthEl.style.width = (curMonthDays * pxPerDay) + 'px';
+
+    tlHeader.appendChild(monthRow);
+    tlHeader.appendChild(dayRow);
+    grid.appendChild(tlHeader);
+  }
+
+  /* ── Section row ── */
+  function renderSection(grid, sec, si, tlW) {
+    const labelCell = el('div', 'gantt-cell gantt-label section-label');
+    labelCell.style.height = SECTION_H + 'px';
+
+    const rHandle = el('span', 'reorder-handle');
+    rHandle.textContent = '⠿';
+    rHandle.title = 'ドラッグしてセクションを並び替え';
+    rHandle.addEventListener('mousedown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      startSectionReorder(e, si);
+    });
+    labelCell.appendChild(rHandle);
+
+    const collapseBtn = el('span', 'collapse-toggle');
+    collapseBtn.textContent = collapsedSections.has(si) ? '▶' : '▼';
+    collapseBtn.title = collapsedSections.has(si) ? '展開' : '折りたたみ';
+    collapseBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (collapsedSections.has(si)) collapsedSections.delete(si);
+      else collapsedSections.add(si);
+      render();
+    });
+    labelCell.appendChild(collapseBtn);
+
+    const nameSpan = el('span', 'section-name');
+    nameSpan.textContent = sec.name;
+    nameSpan.title = 'ダブルクリックで編集';
+    nameSpan.addEventListener('dblclick', () => startSectionEdit(si, nameSpan));
+    labelCell.appendChild(nameSpan);
+
+    labelCell.addEventListener('contextmenu', e => { e.preventDefault(); showContextMenu(e, si, -1); });
+    labelCell.addEventListener('mouseenter', () => { deleteTarget = { si, ti: -1 }; });
+    grid.appendChild(labelCell);
+    rowIndex.push({ type: 'section', si, ti: -1, el: labelCell });
+
+    const tlCell = el('div', 'gantt-cell section-timeline');
+    tlCell.style.width = tlW + 'px';
+    tlCell.style.height = SECTION_H + 'px';
+    tlCell.addEventListener('mousedown', onPanStart);
+    tlCell.addEventListener('contextmenu', e => { e.preventDefault(); showContextMenu(e, si, -1); });
+    grid.appendChild(tlCell);
+  }
+
+  /* ── Task row ── */
+  function renderTask(grid, task, si, ti, tlW) {
+    const labelCell = el('div', 'gantt-cell gantt-label task-label');
+
+    const rHandle = el('span', 'reorder-handle');
+    rHandle.textContent = '⠿';
+    rHandle.title = 'ドラッグして並び替え';
+    rHandle.addEventListener('mousedown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      startReorder(e, si, ti);
+    });
+    labelCell.appendChild(rHandle);
+
+    const labelText = el('span', 'task-label-text');
+    labelText.textContent = task.label;
+    labelText.title = task.label;
+    labelText.addEventListener('dblclick', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      startLabelInlineEdit(si, ti, labelCell);
+    });
+    labelCell.appendChild(labelText);
+
+    labelCell.addEventListener('mouseenter', () => { deleteTarget = { si, ti }; });
+    grid.appendChild(labelCell);
+    rowIndex.push({ type: 'task', si, ti, el: labelCell });
+
+    const tlCell = el('div', 'gantt-cell task-timeline');
+    tlCell.style.width = tlW + 'px';
+    tlCell.dataset.si  = si;
+    tlCell.dataset.ti  = ti;
+
+    const todayX = dateToX(fmtDate(new Date()));
+    if (todayX >= 0 && todayX <= tlW) {
+      const marker = el('div', 'today-line');
+      marker.style.left = todayX + 'px';
+      tlCell.appendChild(marker);
+    }
+
+    tlCell.addEventListener('contextmenu', e => { e.preventDefault(); showContextMenu(e, si, ti); });
+    tlCell.addEventListener('mousedown', onPanStart);
+    tlCell.addEventListener('mouseenter', () => { deleteTarget = { si, ti }; });
+
+    if (task.status === 'milestone') {
+      const x = Math.round(dateToX(task.startDate));
+      const diamond = el('div', 'milestone-diamond');
+      diamond.style.left = (x - DIAMOND_SIZE / 2) + 'px';
+      diamond.style.top  = BAR_TOP + 'px';
+      diamond.dataset.si = si;
+      diamond.dataset.ti = ti;
+      diamond.title = task.label;
+
+      diamond.addEventListener('mousedown', e => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragState = {
+          type: 'move', si, ti, bar: diamond,
+          startX: e.clientX,
+          origDate: task.startDate,
+          isMilestone: true,
+          started: false,
+        };
+        addDragListeners();
+      });
+      diamond.addEventListener('dblclick', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        startLabelInlineEdit(si, ti, labelCell);
+      });
+      diamond.addEventListener('mouseenter', () => { deleteTarget = { si, ti }; });
+
+      tlCell.appendChild(diamond);
+    } else {
+      const x = Math.round(dateToX(task.startDate));
+      const w = Math.max(RESIZE_W + 4, Math.round(task.duration * pxPerDay));
+      const bar = el('div', 'gantt-bar status-' + (task.status || 'default'));
+      bar.style.left = x + 'px';
+      bar.style.width = w + 'px';
+      bar.style.top   = BAR_TOP + 'px';
+      bar.dataset.si  = si;
+      bar.dataset.ti  = ti;
+      bar.title = task.label;
+
+      const indicator = el('div', 'status-indicator');
+      indicator.title = 'クリックで状態変更';
+      indicator.addEventListener('mousedown', e => e.stopPropagation());
+      indicator.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        showStatusPicker(si, ti, indicator);
+      });
+      indicator.addEventListener('dblclick', e => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+      bar.appendChild(indicator);
+
+      const barLabel = el('span', 'bar-label');
+      barLabel.textContent = task.label;
+      bar.appendChild(barLabel);
+
+      const handle = el('div', 'resize-handle');
+      bar.appendChild(handle);
+
+      bar.addEventListener('mousedown',    onMoveStart);
+      bar.addEventListener('dblclick',     onBarDblClick);
+      bar.addEventListener('mouseenter',   () => { deleteTarget = { si, ti }; });
+      handle.addEventListener('mousedown', onResizeStart);
+
+      tlCell.appendChild(bar);
+    }
+
+    grid.appendChild(tlCell);
+  }
+
+  /* ── Drag / move (with threshold) ── */
+  function onMoveStart(e) {
+    if (e.target.classList.contains('resize-handle')) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const bar = e.currentTarget;
+    const si = +bar.dataset.si, ti = +bar.dataset.ti;
+    dragState = {
+      type: 'move', si, ti, bar,
+      startX: e.clientX,
+      origDate: ganttData.sections[si].tasks[ti].startDate,
+      isMilestone: false,
+      started: false,
+    };
+    addDragListeners();
+  }
+
+  function onResizeStart(e) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const bar = e.currentTarget.parentElement;
+    const si = +bar.dataset.si, ti = +bar.dataset.ti;
+    dragState = {
+      type: 'resize', si, ti, bar,
+      startX: e.clientX,
+      origDur: ganttData.sections[si].tasks[ti].duration,
+      isMilestone: false,
+      started: false,
+    };
+    addDragListeners();
+  }
+
+  function addDragListeners() {
+    document.addEventListener('mousemove', onDragMove);
+    document.addEventListener('mouseup',   onDragEnd);
+  }
+
+  function onDragMove(e) {
+    if (!dragState) return;
+    const { bar, type, startX, origDate, origDur, isMilestone, si, ti } = dragState;
+    const dx = e.clientX - startX;
+
+    if (!dragState.started) {
+      if (Math.abs(dx) < DRAG_THRESH) return;
+      dragState.started = true;
+      pushUndo();
+      if (type === 'move') showGhost(ganttData.sections[si].tasks[ti].label);
+      else showGhost('リサイズ中');
+    }
+
+    if (type === 'move') {
+      const days = Math.round(dx / pxPerDay);
+      const newDate = addDays(origDate, days);
+      const newX = Math.round(dateToX(newDate));
+      bar.style.left = (isMilestone ? newX - DIAMOND_SIZE / 2 : newX) + 'px';
+      updateGhost(newDate);
+    } else {
+      const days = Math.round(dx / pxPerDay);
+      const newDur = Math.max(1, origDur + days);
+      bar.style.width = Math.max(RESIZE_W + 4, Math.round(newDur * pxPerDay)) + 'px';
+      updateGhost(newDur + '日');
+    }
+  }
+
+  function onDragEnd(e) {
+    if (!dragState) return;
+    document.removeEventListener('mousemove', onDragMove);
+    document.removeEventListener('mouseup',   onDragEnd);
+    removeGhost();
+
+    if (!dragState.started) {
+      // 閾値未達 → クリックとして扱い dblclick を妨げない
+      dragState = null;
+      return;
+    }
+
+    const { si, ti, type, startX, origDate, origDur } = dragState;
+    const task  = ganttData.sections[si].tasks[ti];
+    const dx    = e.clientX - startX;
+    const days  = Math.round(dx / pxPerDay);
+    let patch   = {};
+
+    if (type === 'move') {
+      if (days === 0) { undoStack.pop(); dragState = null; return; }
+      // ドラッグ移動で after <id> 依存を解除 (R-G11-05)
+      if (task.afterId) delete task.afterId;
+      task.startDate = addDays(origDate, days);
+      patch = { startDate: task.startDate };
+    } else {
+      const newDur = Math.max(1, origDur + days);
+      if (newDur === origDur) { undoStack.pop(); dragState = null; return; }
+      task.duration = newDur;
+      patch = { duration: task.duration };
+    }
+
+    dragState = null;
+
+    // 依存タスクの startDate を再解決し、変更がある場合は structuralEdit で送信
+    if (hasAnyAfterIds()) {
+      resolveAfterIds();
+      vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
+    } else {
+      vscode.postMessage({ type: 'editTask', si, ti, patch });
+    }
+    render();
+  }
+
+  /* ── Ghost label ── */
+  function showGhost(text) {
+    let g = document.getElementById('drag-ghost');
+    if (!g) { g = el('div', 'drag-ghost'); g.id = 'drag-ghost'; document.body.appendChild(g); }
+    g.textContent = text;
+    document.addEventListener('mousemove', moveGhost);
+  }
+  function updateGhost(text) {
+    const g = document.getElementById('drag-ghost');
+    if (g) g.textContent = text;
+  }
+  function moveGhost(e) {
+    const g = document.getElementById('drag-ghost');
+    if (g) { g.style.left = (e.clientX + 14) + 'px'; g.style.top = (e.clientY - 10) + 'px'; }
+  }
+  function removeGhost() {
+    const g = document.getElementById('drag-ghost');
+    if (g) g.remove();
+    document.removeEventListener('mousemove', moveGhost);
+  }
+
+  /* ── Inline edit (gantt title in corner cell) ── */
+  function startTitleEdit(cornerEl) {
+    finishEdit(false);
+    const input = el('input', 'section-edit-input');
+    input.value = ganttData.title || '';
+    input.style.width = '150px';
+    cornerEl.textContent = '';
+    cornerEl.appendChild(input);
+    editingEl = { input, original: ganttData.title || '', type: 'title' };
+    input.focus(); input.select();
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  { e.preventDefault(); finishEdit(true); }
+      if (e.key === 'Escape') { e.preventDefault(); finishEdit(false); }
+      e.stopPropagation();
+    });
+    input.addEventListener('blur', () => finishEdit(true));
+    document.addEventListener('mousedown', onEditOutsideDown, true);
+  }
+
+  /* ── Click-outside handler for inline edit ──
+     Registered in capture phase so it fires before any mousedown handler
+     that calls e.preventDefault() (which would prevent blur from firing). */
+  function onEditOutsideDown(e) {
+    if (!editingEl) {
+      document.removeEventListener('mousedown', onEditOutsideDown, true);
+      return;
+    }
+    if (e.target === editingEl.input) return;
+    finishEdit(true);
+  }
+
+  /* ── Inline edit (bar dblclick) ── */
+  function onBarDblClick(e) {
+    e.preventDefault();
+    const bar = e.currentTarget;
+    startTaskEdit(+bar.dataset.si, +bar.dataset.ti, bar);
+  }
+
+  function startTaskEdit(si, ti, bar) {
+    finishEdit(false);
+    const task = ganttData.sections[si].tasks[ti];
+    const input = el('input', 'bar-edit-input');
+    input.value = task.label;
+    bar.appendChild(input);
+    editingEl = { input, si, ti, original: task.label, type: 'task' };
+    input.focus(); input.select();
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  { e.preventDefault(); finishEdit(true); }
+      if (e.key === 'Escape') { e.preventDefault(); finishEdit(false); }
+      e.stopPropagation();
+    });
+    input.addEventListener('blur', () => finishEdit(true));
+    document.addEventListener('mousedown', onEditOutsideDown, true);
+  }
+
+  /* ── Inline edit (label cell — milestones & task labels) ── */
+  function startLabelInlineEdit(si, ti, labelCell) {
+    finishEdit(false);
+    const task = ganttData.sections[si].tasks[ti];
+    const labelSpan = labelCell.querySelector('.task-label-text');
+    if (!labelSpan) return;
+    const input = el('input', 'section-edit-input');
+    input.value = task.label;
+    input.style.width = '140px';
+    labelSpan.replaceWith(input);
+    editingEl = { input, si, ti, original: task.label, type: 'task' };
+    input.focus(); input.select();
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  { e.preventDefault(); finishEdit(true); }
+      if (e.key === 'Escape') { e.preventDefault(); finishEdit(false); }
+      e.stopPropagation();
+    });
+    input.addEventListener('blur', () => finishEdit(true));
+    document.addEventListener('mousedown', onEditOutsideDown, true);
+  }
+
+  /* ── Inline edit (section name) ── */
+  function startSectionEdit(si, nameSpan) {
+    finishEdit(false);
+    const sec = ganttData.sections[si];
+    const input = el('input', 'section-edit-input');
+    input.value = sec.name;
+    nameSpan.replaceWith(input);
+    editingEl = { input, si, original: sec.name, type: 'section' };
+    input.focus(); input.select();
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  { e.preventDefault(); finishEdit(true); }
+      if (e.key === 'Escape') { e.preventDefault(); finishEdit(false); }
+      e.stopPropagation();
+    });
+    input.addEventListener('blur', () => finishEdit(true));
+    document.addEventListener('mousedown', onEditOutsideDown, true);
+  }
+
+  function finishEdit(commit) {
+    if (!editingEl) return;
+    document.removeEventListener('mousedown', onEditOutsideDown, true);
+    const { input, original, type } = editingEl;
+    const newVal = type === 'title' ? input.value : input.value.trim();
+    const snap = editingEl;
+    editingEl = null;
+    if (!commit || (type !== 'title' && !newVal) || newVal === original) {
+      render();
+      document.getElementById('scroll-container').focus({ preventScroll: true });
+      return;
+    }
+    pushUndo();
+    if (type === 'task') {
+      ganttData.sections[snap.si].tasks[snap.ti].label = newVal;
+      vscode.postMessage({ type: 'editTask', si: snap.si, ti: snap.ti, patch: { label: newVal } });
+    } else if (type === 'section') {
+      ganttData.sections[snap.si].name = newVal;
+      vscode.postMessage({ type: 'editSection', si: snap.si, name: newVal });
+    } else if (type === 'title') {
+      ganttData.title = newVal;
+      vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
+    }
+    render();
+    document.getElementById('scroll-container').focus({ preventScroll: true });
+  }
+
+  /* ── Context menu (viewport-aware) ── */
+  function showContextMenu(e, si, ti) {
+    removeContextMenu();
+    deleteTarget = { si, ti };
+
+    const menu = el('div', 'context-menu');
+    menu.style.visibility = 'hidden';
+
+    function item(text, fn, disabled) {
+      const div = el('div', 'menu-item' + (disabled ? ' menu-item-disabled' : ''));
+      div.textContent = text;
+      if (!disabled) div.addEventListener('click', () => { removeContextMenu(); fn(); });
+      menu.appendChild(div);
+    }
+    function sep() { menu.appendChild(el('div', 'menu-separator')); }
+
+    if (ti >= 0) {
+      // タスクのコンテキストメニュー
+      item('＋ タスクを追加', () => addTask(si, ti));
+      item('◆ マイルストーンを追加', () => addMilestone(si, ti));
+      item('⊕ タスクを複製', () => duplicateTask(si, ti));
+      sep();
+      item('✎ 日程を編集', () => showDateEditPopup(si, ti, e.clientX, e.clientY));
+      sep();
+      const isFirst = si === 0 && ti === 0;
+      const lastSi  = ganttData.sections.length - 1;
+      const isLast  = si === lastSi && ti === ganttData.sections[lastSi].tasks.length - 1;
+      item('↑ 上へ移動', () => moveTaskUp(si, ti),   isFirst);
+      item('↓ 下へ移動', () => moveTaskDown(si, ti), isLast);
+      sep();
+      const task = ganttData.sections[si].tasks[ti];
+      if (task.afterId) {
+        item('⛓ 依存関係を削除', () => removeDependency(si, ti));
+      } else {
+        item('⛓ 依存関係を設定', () => showDependencyPicker(si, ti, e.clientX, e.clientY));
+      }
+      sep();
+      item('✕ タスクを削除', () => deleteTask(si, ti));
+    } else {
+      // セクションのコンテキストメニュー
+      const lastTi = ganttData.sections[si].tasks.length - 1;
+      item('＋ タスクを追加', () => addTask(si, lastTi));
+      item('◆ マイルストーンを追加', () => addMilestone(si, lastTi));
+      if (ganttData.sections[si].name) {
+        sep();
+        item('✕ セクションを削除', () => deleteSection(si));
+      }
+    }
+
+    document.body.appendChild(menu);
+
+    // ビューポート折り返し
+    const mW = menu.offsetWidth  || 160;
+    const mH = menu.offsetHeight || 120;
+    let left = e.clientX;
+    let top  = e.clientY;
+    if (left + mW > window.innerWidth)  left = e.clientX - mW;
+    if (top  + mH > window.innerHeight) top  = e.clientY - mH;
+    if (left < 4) left = 4;
+    if (top  < 4) top  = 4;
+    menu.style.left       = left + 'px';
+    menu.style.top        = top  + 'px';
+    menu.style.visibility = '';
+
+    setTimeout(() => document.addEventListener('click', removeContextMenu, { once: true }), 0);
+  }
+
+  function removeContextMenu() {
+    document.querySelectorAll('.context-menu').forEach(m => m.remove());
+  }
+
+  /* ── Dependency picker ── */
+  function showDependencyPicker(si, ti, cx, cy) {
+    removeDependencyPicker();
+
+    const candidates = [];
+    ganttData.sections.forEach((sec, sIdx) => {
+      sec.tasks.forEach((task, tIdx) => {
+        if (sIdx === si && tIdx === ti) return; // exclude self
+        candidates.push({ label: task.label, id: task.id, si: sIdx, ti: tIdx });
+      });
+    });
+
+    if (candidates.length === 0) return;
+
+    const picker = el('div', 'dep-picker');
+
+    const header = el('div', 'dep-picker-header');
+    header.textContent = '依存元タスクを選択';
+    picker.appendChild(header);
+
+    candidates.forEach(({ label, id, si: srcSi, ti: srcTi }) => {
+      const row = el('div', 'menu-item');
+      row.textContent = id ? `${label}  [${id}]` : label;
+      row.addEventListener('click', e => {
+        e.stopPropagation();
+        removeDependencyPicker();
+        applyDependency(si, ti, srcSi, srcTi);
+      });
+      picker.appendChild(row);
+    });
+
+    picker.style.visibility = 'hidden';
+    document.body.appendChild(picker);
+
+    const pW = picker.offsetWidth  || 200;
+    const pH = picker.offsetHeight || 200;
+    let left = cx, top = cy;
+    if (left + pW > window.innerWidth)  left = cx - pW;
+    if (top  + pH > window.innerHeight) top  = cy - pH;
+    if (left < 4) left = 4;
+    if (top  < 4) top  = 4;
+    picker.style.left       = left + 'px';
+    picker.style.top        = top  + 'px';
+    picker.style.visibility = '';
+
+    setTimeout(() => document.addEventListener('click', removeDependencyPicker, { once: true }), 0);
+  }
+
+  function removeDependencyPicker() {
+    document.querySelectorAll('.dep-picker').forEach(m => m.remove());
+  }
+
+  function applyDependency(si, ti, srcSi, srcTi) {
+    pushUndo();
+    const srcTask = ganttData.sections[srcSi].tasks[srcTi];
+    if (!srcTask.id) srcTask.id = generateTaskId();
+
+    const depTask = ganttData.sections[si].tasks[ti];
+    depTask.afterId = srcTask.id;
+    depTask.startDate = addDays(srcTask.startDate, srcTask.duration || 0);
+
+    resolveAfterIds();
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
+    render();
+  }
+
+  function removeDependency(si, ti) {
+    pushUndo();
+    delete ganttData.sections[si].tasks[ti].afterId;
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
+    render();
+  }
+
+  /* ── Dependency arrows ── */
+  function drawDependencyArrows() {
+    const container = document.getElementById('scroll-container');
+    const existing = document.getElementById('dep-arrows');
+    if (existing) existing.remove();
+
+    if (!ganttData) return;
+
+    // Build id → {si, ti}
+    const idToPos = new Map();
+    ganttData.sections.forEach((sec, si) => {
+      sec.tasks.forEach((task, ti) => {
+        if (task.id) idToPos.set(task.id, { si, ti });
+      });
+    });
+
+    // Collect arrows
+    const arrowPairs = [];
+    ganttData.sections.forEach((sec, si) => {
+      if (collapsedSections.has(si)) return;
+      sec.tasks.forEach((task, ti) => {
+        if (!task.afterId) return;
+        const srcPos = idToPos.get(task.afterId);
+        if (!srcPos || collapsedSections.has(srcPos.si)) return;
+        arrowPairs.push({ fromSi: srcPos.si, fromTi: srcPos.ti, toSi: si, toTi: ti });
+      });
+    });
+
+    if (arrowPairs.length === 0) return;
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.id = 'dep-arrows';
+    const grid = document.getElementById('gantt-grid');
+    svg.setAttribute('width', grid.scrollWidth);
+    svg.setAttribute('height', grid.scrollHeight);
+    container.appendChild(svg);
+
+    // Arrowhead marker
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    marker.setAttribute('id', 'dep-arrowhead');
+    marker.setAttribute('markerWidth', '8');
+    marker.setAttribute('markerHeight', '6');
+    marker.setAttribute('refX', '7');
+    marker.setAttribute('refY', '3');
+    marker.setAttribute('orient', 'auto');
+    const tip = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    tip.setAttribute('points', '0 0, 8 3, 0 6');
+    tip.setAttribute('fill', 'var(--vscode-charts-orange, #e8a87c)');
+    marker.appendChild(tip);
+    defs.appendChild(marker);
+    svg.appendChild(defs);
+
+    const cRect = container.getBoundingClientRect();
+
+    function relPos(barEl) {
+      const r = barEl.getBoundingClientRect();
+      const sl = container.scrollLeft, st = container.scrollTop;
+      return {
+        right: r.right - cRect.left + sl,
+        left:  r.left  - cRect.left + sl,
+        midY:  (r.top + r.bottom) / 2 - cRect.top + st,
+      };
+    }
+
+    arrowPairs.forEach(({ fromSi, fromTi, toSi, toTi }) => {
+      const srcEl = document.querySelector(`.gantt-bar[data-si="${fromSi}"][data-ti="${fromTi}"]`) ||
+                    document.querySelector(`.milestone-diamond[data-si="${fromSi}"][data-ti="${fromTi}"]`);
+      const dstEl = document.querySelector(`.gantt-bar[data-si="${toSi}"][data-ti="${toTi}"]`) ||
+                    document.querySelector(`.milestone-diamond[data-si="${toSi}"][data-ti="${toTi}"]`);
+      if (!srcEl || !dstEl) return;
+
+      const src = relPos(srcEl);
+      const dst = relPos(dstEl);
+      const x1 = src.right, y1 = src.midY;
+      const x2 = dst.left,  y2 = dst.midY;
+      const bend = Math.max(16, Math.abs(x2 - x1) * 0.35);
+
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`);
+      path.setAttribute('stroke', 'var(--vscode-charts-orange, #e8a87c)');
+      path.setAttribute('stroke-width', '1.5');
+      path.setAttribute('fill', 'none');
+      path.setAttribute('marker-end', 'url(#dep-arrowhead)');
+      svg.appendChild(path);
+    });
+  }
+
+  /* ── Date/duration edit popup ── */
+  function onDateEditOutsideDown(e) {
+    const popup = document.querySelector('.date-edit-popup');
+    if (popup && popup.contains(e.target)) return;
+    removeDateEditPopup();
+  }
+
+  function removeDateEditPopup() {
+    document.removeEventListener('mousedown', onDateEditOutsideDown, true);
+    document.querySelectorAll('.date-edit-popup').forEach(p => p.remove());
+  }
+
+  function showDateEditPopup(si, ti, cx, cy) {
+    finishEdit(false);
+    removeDateEditPopup();
+
+    const task = ganttData.sections[si].tasks[ti];
+    const isMilestone = task.status === 'milestone';
+
+    const popup = el('div', 'date-edit-popup');
+
+    const header = el('div', 'dep-picker-header');
+    header.textContent = '日程を編集';
+    popup.appendChild(header);
+
+    // 開始日行
+    const startRow = el('div', 'date-edit-row');
+    const startLabel = el('label', 'date-edit-label');
+    startLabel.textContent = '開始日';
+    const startInput = el('input');
+    startInput.type = 'date';
+    startInput.value = task.startDate;
+    startInput.className = 'date-edit-input';
+    startRow.appendChild(startLabel);
+    startRow.appendChild(startInput);
+    popup.appendChild(startRow);
+
+    // 期間行（マイルストーン以外）
+    let durInput = null;
+    if (!isMilestone) {
+      const durRow = el('div', 'date-edit-row');
+      const durLabel = el('label', 'date-edit-label');
+      durLabel.textContent = '期間（日）';
+      durInput = el('input');
+      durInput.type = 'number';
+      durInput.min = '1';
+      durInput.value = String(task.duration);
+      durInput.className = 'date-edit-input date-edit-dur';
+      durRow.appendChild(durLabel);
+      durRow.appendChild(durInput);
+      popup.appendChild(durRow);
+    }
+
+    // エラー表示
+    const errMsg = el('div', 'date-edit-error');
+    errMsg.style.display = 'none';
+    popup.appendChild(errMsg);
+
+    // ボタン行
+    const actions = el('div', 'date-edit-actions');
+    const cancelBtn = el('button', 'date-edit-btn date-edit-cancel');
+    cancelBtn.textContent = 'キャンセル';
+    cancelBtn.type = 'button';
+    const applyBtn = el('button', 'date-edit-btn date-edit-apply');
+    applyBtn.textContent = '適用';
+    applyBtn.type = 'button';
+    actions.appendChild(cancelBtn);
+    actions.appendChild(applyBtn);
+    popup.appendChild(actions);
+
+    popup.style.visibility = 'hidden';
+    document.body.appendChild(popup);
+
+    // 位置調整
+    const pW = popup.offsetWidth  || 220;
+    const pH = popup.offsetHeight || 180;
+    let left = cx, top = cy;
+    if (left + pW > window.innerWidth)  left = cx - pW;
+    if (top  + pH > window.innerHeight) top  = cy - pH;
+    if (left < 4) left = 4;
+    if (top  < 4) top  = 4;
+    popup.style.left       = left + 'px';
+    popup.style.top        = top  + 'px';
+    popup.style.visibility = '';
+
+    startInput.focus();
+
+    function apply() {
+      const newDate = startInput.value;
+      if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+        errMsg.textContent = '有効な日付（YYYY-MM-DD）を入力してください';
+        errMsg.style.display = 'block';
+        return;
+      }
+      let newDur = isMilestone ? 0 : task.duration;
+      if (!isMilestone && durInput) {
+        newDur = parseInt(durInput.value, 10);
+        if (isNaN(newDur) || newDur < 1) {
+          errMsg.textContent = '期間は1日以上で入力してください';
+          errMsg.style.display = 'block';
+          return;
+        }
+      }
+      removeDateEditPopup();
+      pushUndo();
+
+      const t = ganttData.sections[si].tasks[ti];
+      t.startDate = newDate;
+      t.duration  = newDur;
+      if (t.afterId) {
+        delete t.afterId; // R-G14-04: 依存関係を解除して絶対日付に変換
+        vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
+      } else {
+        vscode.postMessage({ type: 'editTask', si, ti, patch: { startDate: newDate, duration: newDur } });
+      }
+      render();
+    }
+
+    cancelBtn.addEventListener('click', removeDateEditPopup);
+    applyBtn.addEventListener('click', apply);
+
+    [startInput, durInput].filter(Boolean).forEach(inp => {
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter')  { e.preventDefault(); apply(); }
+        if (e.key === 'Escape') { e.preventDefault(); removeDateEditPopup(); }
+        e.stopPropagation();
+      });
+    });
+
+    setTimeout(() => document.addEventListener('mousedown', onDateEditOutsideDown, true), 0);
+  }
+
+  /* ── Add / Delete ── */
+  function addTask(si, afterTi) {
+    pushUndo();
+    const sec = ganttData.sections[si];
+    const prev = (afterTi >= 0 && afterTi < sec.tasks.length) ? sec.tasks[afterTi] : null;
+    const startDate = prev ? addDays(prev.startDate, prev.duration || 0) : fmtDate(new Date());
+    const newTask = { id: '', label: '新しいタスク', status: '', startDate, duration: 7 };
+    sec.tasks.splice(afterTi + 1, 0, newTask);
+    vscode.postMessage({ type: 'addTask', si, afterTi, task: newTask });
+    render();
+    const newTi = afterTi + 1;
+    const bar = document.querySelector(`.gantt-bar[data-si="${si}"][data-ti="${newTi}"]`);
+    if (bar) startTaskEdit(si, newTi, bar);
+  }
+
+  function addMilestone(si, afterTi) {
+    pushUndo();
+    const sec = ganttData.sections[si];
+    const prev = (afterTi >= 0 && afterTi < sec.tasks.length) ? sec.tasks[afterTi] : null;
+    const startDate = prev ? addDays(prev.startDate, prev.duration || 0) : fmtDate(new Date());
+    const newTask = { id: '', label: 'マイルストーン', status: 'milestone', startDate, duration: 0 };
+    sec.tasks.splice(afterTi + 1, 0, newTask);
+    vscode.postMessage({ type: 'addTask', si, afterTi, task: newTask });
+    render();
+    const newTi = afterTi + 1;
+    const row = rowIndex.find(r => r.type === 'task' && r.si === si && r.ti === newTi);
+    if (row) startLabelInlineEdit(si, newTi, row.el);
+  }
+
+  function duplicateTask(si, ti) {
+    pushUndo();
+    const sec = ganttData.sections[si];
+    const orig = sec.tasks[ti];
+    const newTask = {
+      id: '',
+      label: orig.label,
+      status: orig.status,
+      startDate: addDays(orig.startDate, orig.duration || 0),
+      duration: orig.duration,
+    };
+    sec.tasks.splice(ti + 1, 0, newTask);
+    vscode.postMessage({ type: 'addTask', si, afterTi: ti, task: newTask });
+    render();
+    const newTi = ti + 1;
+    if (orig.status === 'milestone') {
+      const row = rowIndex.find(r => r.type === 'task' && r.si === si && r.ti === newTi);
+      if (row) startLabelInlineEdit(si, newTi, row.el);
+    } else {
+      const bar = document.querySelector(`.gantt-bar[data-si="${si}"][data-ti="${newTi}"]`);
+      if (bar) startTaskEdit(si, newTi, bar);
+    }
+  }
+
+  function deleteTask(si, ti) {
+    pushUndo();
+    ganttData.sections[si].tasks.splice(ti, 1);
+    vscode.postMessage({ type: 'deleteTask', si, ti });
+    deleteTarget = null;
+    render();
+  }
+
+  function deleteSection(si) {
+    pushUndo();
+    ganttData.sections.splice(si, 1);
+    if (ganttData.sections.length === 0) {
+      ganttData.sections = [{ name: '', tasks: [] }];
+    }
+    collapsedSections.delete(si);
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
+    deleteTarget = null;
+    render();
+  }
+
+  function addSection(name) {
+    pushUndo();
+    ganttData.sections.push({ name, tasks: [] });
+    vscode.postMessage({ type: 'addSection', name });
+    render();
+  }
+
+  /* ── Task reorder (context menu) ── */
+  function moveTaskUp(si, ti) {
+    pushUndo();
+    if (ti > 0) {
+      const tasks = ganttData.sections[si].tasks;
+      [tasks[ti-1], tasks[ti]] = [tasks[ti], tasks[ti-1]];
+    } else if (si > 0) {
+      const task = ganttData.sections[si].tasks.splice(ti, 1)[0];
+      ganttData.sections[si-1].tasks.push(task);
+    }
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
+    render();
+  }
+
+  function moveTaskDown(si, ti) {
+    pushUndo();
+    const sec = ganttData.sections[si];
+    if (ti < sec.tasks.length - 1) {
+      [sec.tasks[ti], sec.tasks[ti+1]] = [sec.tasks[ti+1], sec.tasks[ti]];
+    } else if (si < ganttData.sections.length - 1) {
+      const task = sec.tasks.splice(ti, 1)[0];
+      ganttData.sections[si+1].tasks.unshift(task);
+    }
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
+    render();
+  }
+
+  /* ── Drag-and-drop reorder (tasks) ── */
+  function startReorder(e, si, ti) {
+    if (e.button !== 0) return;
+    reorderState = { type: 'task', si, ti, active: false, startY: e.clientY, target: null };
+    document.addEventListener('mousemove', onReorderMove);
+    document.addEventListener('mouseup',   onReorderEnd);
+  }
+
+  /* ── Drag-and-drop reorder (sections) ── */
+  function startSectionReorder(e, si) {
+    if (e.button !== 0) return;
+    reorderState = { type: 'section', si, active: false, startY: e.clientY, target: null };
+    document.addEventListener('mousemove', onReorderMove);
+    document.addEventListener('mouseup',   onReorderEnd);
+  }
+
+  function onReorderMove(e) {
+    if (!reorderState) return;
+    if (!reorderState.active && Math.abs(e.clientY - reorderState.startY) > 4) {
+      reorderState.active = true;
+      const ind = el('div', 'drop-indicator');
+      ind.id = 'drop-indicator';
+      document.body.appendChild(ind);
+    }
+    if (!reorderState.active) return;
+
+    const target = reorderState.type === 'section'
+      ? findSectionDropTarget(e.clientY, reorderState.si)
+      : findDropTarget(e.clientY);
+    reorderState.target = target;
+
+    const ind = document.getElementById('drop-indicator');
+    if (ind && target) {
+      const rect = target.el.getBoundingClientRect();
+      ind.style.top = (target.position === 'before' ? rect.top : rect.bottom) - 1 + 'px';
+    }
+  }
+
+  function onReorderEnd() {
+    document.removeEventListener('mousemove', onReorderMove);
+    document.removeEventListener('mouseup',   onReorderEnd);
+    const ind = document.getElementById('drop-indicator');
+    if (ind) ind.remove();
+
+    if (!reorderState || !reorderState.active || !reorderState.target) {
+      reorderState = null;
+      return;
+    }
+
+    const state = reorderState;
+    reorderState = null;
+
+    if (state.type === 'section') {
+      applySectionReorder(state.si, state.target);
+    } else {
+      applyTaskReorder(state.si, state.ti, state.target);
+    }
+  }
+
+  function findDropTarget(clientY) {
+    const tasks = rowIndex.filter(r => r.type === 'task');
+    for (const row of tasks) {
+      const rect = row.el.getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) {
+        return { si: row.si, ti: row.ti, position: 'before', el: row.el };
+      }
+    }
+    if (tasks.length > 0) {
+      const last = tasks[tasks.length - 1];
+      return { si: last.si, ti: last.ti, position: 'after', el: last.el };
+    }
+    return null;
+  }
+
+  function findSectionDropTarget(clientY, fromSi) {
+    const sections = rowIndex.filter(r => r.type === 'section' && r.si !== fromSi);
+    for (const row of sections) {
+      const rect = row.el.getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) {
+        return { si: row.si, position: 'before', el: row.el };
+      }
+    }
+    if (sections.length > 0) {
+      const last = sections[sections.length - 1];
+      return { si: last.si, position: 'after', el: last.el };
+    }
+    return null;
+  }
+
+  function applyTaskReorder(fromSi, fromTi, target) {
+    if (fromSi === target.si && fromTi === target.ti && target.position === 'before') {
+      render(); return;
+    }
+    pushUndo();
+    const task = ganttData.sections[fromSi].tasks.splice(fromTi, 1)[0];
+    let insertTi = target.position === 'after' ? target.ti + 1 : target.ti;
+    if (fromSi === target.si && target.ti > fromTi) insertTi--;
+    const sec = ganttData.sections[target.si];
+    insertTi = Math.max(0, Math.min(insertTi, sec.tasks.length));
+    sec.tasks.splice(insertTi, 0, task);
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
+    render();
+  }
+
+  function applySectionReorder(fromSi, target) {
+    if (!target) { render(); return; }
+    let toSi = target.si;
+    if (fromSi === toSi) { render(); return; }
+    pushUndo();
+    const section = ganttData.sections.splice(fromSi, 1)[0];
+    let insertSi = target.position === 'after' ? toSi + 1 : toSi;
+    if (toSi > fromSi) insertSi--;
+    insertSi = Math.max(0, Math.min(insertSi, ganttData.sections.length));
+    ganttData.sections.splice(insertSi, 0, section);
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
+    render();
+  }
+
+  /* ── Pan ── */
+  function onPanStart(e) {
+    if (e.button !== 0) return;
+    if (e.target.closest('.gantt-bar') ||
+        e.target.closest('.milestone-diamond') ||
+        e.target.closest('.resize-handle')) return;
+    e.preventDefault();
+    const container = document.getElementById('scroll-container');
+    panState = {
+      startX: e.clientX, startY: e.clientY,
+      scrollLeft: container.scrollLeft, scrollTop: container.scrollTop,
+    };
+    document.addEventListener('mousemove', onPanMove);
+    document.addEventListener('mouseup',   onPanEnd);
+  }
+
+  function onPanMove(e) {
+    if (!panState) return;
+    const container = document.getElementById('scroll-container');
+    container.scrollLeft = panState.scrollLeft - (e.clientX - panState.startX);
+    container.scrollTop  = panState.scrollTop  - (e.clientY - panState.startY);
+  }
+
+  function onPanEnd() {
+    document.removeEventListener('mousemove', onPanMove);
+    document.removeEventListener('mouseup',   onPanEnd);
+    panState = null;
+  }
+
+  /* ── Status picker ── */
+  function showStatusPicker(si, ti, anchor) {
+    removeStatusPicker();
+    const picker = el('div', 'status-picker');
+
+    const current = ganttData.sections[si].tasks[ti].status;
+    const STATUSES = [
+      { value: 'done',   label: '✓  完了 (done)',    cls: 'pick-done'    },
+      { value: 'active', label: '▶  進行中 (active)', cls: 'pick-active'  },
+      { value: 'crit',   label: '!  重要 (crit)',     cls: 'pick-crit'    },
+      { value: '',       label: '○  未設定',           cls: 'pick-default' },
+    ];
+
+    STATUSES.forEach(({ value, label, cls }) => {
+      const item = el('div', 'menu-item ' + cls + (value === current ? ' pick-current' : ''));
+      item.textContent = (value === current ? '● ' : '  ') + label;
+      item.addEventListener('click', e => {
+        e.stopPropagation();
+        removeStatusPicker();
+        applyStatus(si, ti, value);
+      });
+      picker.appendChild(item);
+    });
+
+    picker.style.visibility = 'hidden';
+    document.body.appendChild(picker);
+
+    const rect = anchor.getBoundingClientRect();
+    let left = rect.left;
+    let top  = rect.bottom + 4;
+    const pW = picker.offsetWidth  || 160;
+    const pH = picker.offsetHeight || 120;
+    if (left + pW > window.innerWidth)  left = window.innerWidth  - pW - 4;
+    if (top  + pH > window.innerHeight) top  = rect.top - pH - 4;
+    if (left < 4) left = 4;
+    picker.style.left       = left + 'px';
+    picker.style.top        = top  + 'px';
+    picker.style.visibility = '';
+
+    setTimeout(() => document.addEventListener('click', removeStatusPicker, { once: true }), 0);
+  }
+
+  function removeStatusPicker() {
+    document.querySelectorAll('.status-picker').forEach(m => m.remove());
+  }
+
+  function applyStatus(si, ti, status) {
+    pushUndo();
+    ganttData.sections[si].tasks[ti].status = status;
+    vscode.postMessage({ type: 'editTask', si, ti, patch: { status } });
+    render();
+  }
+
+  /* ── Undo ── */
+  function pushUndo() {
+    undoStack.push(JSON.parse(JSON.stringify(ganttData)));
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  }
+
+  function undo() {
+    if (!undoStack.length) return;
+    ganttData = undoStack.pop();
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
+    render();
+  }
+
+  /* ── Status bar ── */
+  let statusTimer = null;
+  function showStatus(text) {
+    const lbl = document.getElementById('status-label');
+    lbl.textContent = text;
+    lbl.classList.add('show');
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => lbl.classList.remove('show'), 1800);
+  }
+
+  /* ── Scroll to today − 3 days ── */
+  function scrollToToday() {
+    const container = document.getElementById('scroll-container');
+    container.scrollLeft = Math.max(0, dateToX(addDays(fmtDate(new Date()), -3)));
+    container.scrollTop  = 0;
+  }
+
+  /* ── Messages from extension ── */
+  window.addEventListener('message', e => {
+    const msg = e.data;
+    if (msg.type === 'update') {
+      document.getElementById('empty-overlay').classList.remove('visible');
+      document.getElementById('scroll-container').style.display = '';
+      document.getElementById('btn-add-task').disabled    = false;
+      document.getElementById('btn-add-section').disabled = false;
+      document.getElementById('btn-undo').disabled         = false;
+      document.getElementById('sel-axis-format').disabled = false;
+      ganttData = msg.gantt;
+      document.getElementById('sel-axis-format').value = ganttData.axisFormat || '';
+      undoStack = [];
+      autoFitPpd = true;
+      collapsedSections.clear();
+      render();
+      scrollToToday();
+    } else if (msg.type === 'empty') {
+      document.getElementById('scroll-container').style.display = 'none';
+      document.getElementById('empty-overlay').classList.add('visible');
+      document.getElementById('btn-add-task').disabled    = true;
+      document.getElementById('btn-add-section').disabled = true;
+      document.getElementById('btn-undo').disabled         = true;
+      document.getElementById('sel-axis-format').disabled = true;
+    } else if (msg.type === 'saved') {
+      showStatus('✓ 保存済');
+    }
+  });
+
+  /* ── Keyboard ── */
+  document.addEventListener('keydown', e => {
+    if (editingEl) return;
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); return; }
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); vscode.postMessage({ type: 'save' }); return; }
+    if (e.key === 'Delete' && deleteTarget) {
+      e.preventDefault();
+      removeContextMenu();
+      const { si, ti } = deleteTarget;
+      if (ti >= 0) {
+        deleteTask(si, ti);
+      } else if (ganttData.sections[si]?.name) {
+        deleteSection(si);
+      }
+    }
+  });
+
+  /* ── Wheel zoom (Ctrl+wheel) / scroll (plain wheel) ── */
+  document.getElementById('scroll-container').addEventListener('wheel', e => {
+    if (!e.ctrlKey) return; // plain wheel → browser default scroll
+    e.preventDefault();
+    const container = e.currentTarget;
+    const rect = container.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left + container.scrollLeft - LABEL_W;
+    const dayAtCursor = mouseX / pxPerDay;
+    const factor = e.deltaY < 0 ? 1.15 : (1 / 1.15);
+    const newPPD = Math.max(MIN_PPD, Math.min(MAX_PPD, pxPerDay * factor));
+    if (Math.abs(newPPD - pxPerDay) < 0.01) return;
+    const newScrollLeft = Math.round(dayAtCursor * newPPD) - (e.clientX - rect.left) + LABEL_W;
+    pxPerDay = newPPD;
+    autoFitPpd = false;
+    render();
+    container.scrollLeft = Math.max(0, newScrollLeft);
+  }, { passive: false });
+
+  /* ── Toolbar buttons ── */
+  document.getElementById('btn-add-task').addEventListener('click', () => {
+    if (!ganttData || !ganttData.sections.length) return;
+    const si = 0;
+    addTask(si, ganttData.sections[si].tasks.length - 1);
+  });
+
+  document.getElementById('btn-add-section').addEventListener('click', () => {
+    if (!ganttData) return;
+    addSection('新しいセクション');
+  });
+
+  document.getElementById('btn-undo').addEventListener('click', () => {
+    if (!ganttData) return;
+    undo();
+  });
+
+  document.getElementById('btn-reset').addEventListener('click', () => {
+    if (!ganttData) return;
+    pxPerDay = DEF_PPD;
+    autoFitPpd = false;
+    render();
+    scrollToToday();
+  });
+
+  document.getElementById('btn-init-gantt').addEventListener('click', () => {
+    vscode.postMessage({ type: 'initGantt' });
+  });
+
+  document.getElementById('sel-axis-format').addEventListener('change', e => {
+    if (!ganttData) return;
+    const val = e.target.value;
+    pushUndo();
+    if (val) ganttData.axisFormat = val;
+    else delete ganttData.axisFormat;
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
+    render();
+  });
+
+  /* ── Ready ── */
+  vscode.postMessage({ type: 'ready' });
+})();

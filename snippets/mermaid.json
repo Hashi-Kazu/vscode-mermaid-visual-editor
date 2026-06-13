@@ -1,0 +1,72 @@
+{
+  "Flowchart": {
+    "prefix": "flow",
+    "body": [
+      "flowchart TD",
+      "    ${1:A}[${2:Start}] --> ${3:B}[${4:End}]"
+    ],
+    "description": "フローチャート"
+  },
+  "Sequence Diagram": {
+    "prefix": "seq",
+    "body": [
+      "sequenceDiagram",
+      "    ${1:Alice}->>+${2:Bob}: ${3:Hello}",
+      "    ${2:Bob}-->>-${1:Alice}: ${4:World}"
+    ],
+    "description": "シーケンス図"
+  },
+  "Class Diagram": {
+    "prefix": "cls",
+    "body": [
+      "classDiagram",
+      "    class ${1:Animal} {",
+      "        +String name",
+      "        +speak() void",
+      "    }"
+    ],
+    "description": "クラス図"
+  },
+  "ER Diagram": {
+    "prefix": "er",
+    "body": [
+      "erDiagram",
+      "    ${1:CUSTOMER} ||--o{ ${2:ORDER} : places",
+      "    ${2:ORDER} {",
+      "        int id",
+      "        string status",
+      "    }"
+    ],
+    "description": "ER図"
+  },
+  "Gantt Chart": {
+    "prefix": "gantt",
+    "body": [
+      "gantt",
+      "    title ${1:My Project}",
+      "    dateFormat YYYY-MM-DD",
+      "    section ${2:Section}",
+      "        ${3:Task1} :${4:2025-01-01}, ${5:7d}"
+    ],
+    "description": "ガントチャート"
+  },
+  "Pie Chart": {
+    "prefix": "pie",
+    "body": [
+      "pie title ${1:My Chart}",
+      "    \"${2:A}\" : ${3:40}",
+      "    \"${4:B}\" : ${5:60}"
+    ],
+    "description": "円グラフ"
+  },
+  "Mermaid Block (Markdown)": {
+    "prefix": "mermaid",
+    "body": [
+      "```mermaid",
+      "${1:flowchart TD}",
+      "    ${2:A --> B}",
+      "```"
+    ],
+    "description": "Markdownのmermaidコードブロック"
+  }
+}
