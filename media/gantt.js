@@ -1396,6 +1396,13 @@
     vscode.postMessage({ type: 'initGantt' });
   });
 
+  const btnSwitchFlow = document.getElementById('btn-switch-flow');
+  if (btnSwitchFlow) {
+    btnSwitchFlow.addEventListener('click', () => {
+      vscode.postMessage({ type: 'switchType', diagramType: 'flowchart' });
+    });
+  }
+
   document.getElementById('sel-axis-format').addEventListener('change', e => {
     if (!ganttData) return;
     const val = e.target.value;

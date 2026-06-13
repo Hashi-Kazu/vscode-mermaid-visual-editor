@@ -623,6 +623,13 @@
     send({ type: 'initFlowchart' });
   });
 
+  const btnSwitchGantt = document.getElementById('btn-switch-gantt');
+  if (btnSwitchGantt) {
+    btnSwitchGantt.addEventListener('click', () => {
+      send({ type: 'switchType', diagramType: 'gantt' });
+    });
+  }
+
   // ── Helpers ───────────────────────────────────────────────────────────────
   function send(msg) {
     vscode.postMessage(msg);

@@ -1,55 +1,35 @@
 import * as vscode from 'vscode';
-import { GanttPanel } from './ganttPanel';
-import { FlowchartPanel } from './flowchartPanel';
+import { EditorPanel } from './editorPanel';
 
 export function activate(context: vscode.ExtensionContext): void {
-  const ganttCmd = vscode.commands.registerCommand(
-    'mermaid.openGantt',
-    (uri?: vscode.Uri) => {
-      if (uri) {
-        vscode.workspace.openTextDocument(uri).then(doc => {
-          GanttPanel.createOrShow(context.extensionUri, doc);
-        });
-        return;
-      }
-      const editor = vscode.window.activeTextEditor;
-      if (!editor) {
-        vscode.window.showErrorMessage('まず .mmd または .md ファイルを開いてください。');
-        return;
-      }
-      const lang = editor.document.languageId;
-      if (lang !== 'mermaid' && lang !== 'markdown') {
-        vscode.window.showErrorMessage('Ganttエディタは .mmd または .md ファイルにのみ対応しています。');
-        return;
-      }
-      GanttPanel.createOrShow(context.extensionUri, editor.document);
+  const openEditor = (uri: vscode.Uri | undefined, type: 'gantt' | 'flowchart') => {
+    if (uri) {
+      vscode.workspace.openTextDocument(uri).then(doc => {
+        EditorPanel.createOrShow(context.extensionUri, doc, type);
+      });
+      return;
     }
-  );
-
-  const flowchartCmd = vscode.commands.registerCommand(
-    'mermaid.openFlowchart',
-    (uri?: vscode.Uri) => {
-      if (uri) {
-        vscode.workspace.openTextDocument(uri).then(doc => {
-          FlowchartPanel.createOrShow(context.extensionUri, doc);
-        });
-        return;
-      }
-      const editor = vscode.window.activeTextEditor;
-      if (!editor) {
-        vscode.window.showErrorMessage('まず .md ファイルを開いてください。');
-        return;
-      }
-      const lang = editor.document.languageId;
-      if (lang !== 'mermaid' && lang !== 'markdown') {
-        vscode.window.showErrorMessage('フローチャートエディタは .mmd または .md ファイルにのみ対応しています。');
-        return;
-      }
-      FlowchartPanel.createOrShow(context.extensionUri, editor.document);
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showErrorMessage('まず .mmd または .md ファイルを開いてください。');
+      return;
     }
-  );
+    const lang = editor.document.languageId;
+    if (lang !== 'mermaid' && lang !== 'markdown') {
+      vscode.window.showErrorMessage('エディタは .mmd または .md ファイルにのみ対応しています。');
+      return;
+    }
+    EditorPanel.createOrShow(context.extensionUri, editor.document, type);
+  };
 
-  context.subscriptions.push(ganttCmd, flowchartCmd);
+  context.subscriptions.push(
+    vscode.commands.registerCommand('mermaid.openGantt', (uri?: vscode.Uri) =>
+      openEditor(uri, 'gantt')
+    ),
+    vscode.commands.registerCommand('mermaid.openFlowchart', (uri?: vscode.Uri) =>
+      openEditor(uri, 'flowchart')
+    )
+  );
 }
 
 export function deactivate(): void {}
