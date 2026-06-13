@@ -2,7 +2,7 @@
   "name": "vscode-mermaid-visual-editor",
   "displayName": "Markdown マーメイドビジュアルエディタ",
   "description": "Mermaid記法の図をリアルタイムプレビュー・編集するVS Code拡張機能",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "publisher": "Hashi-Kazu",
   "repository": {
     "type": "git",
@@ -32,8 +32,8 @@
     ],
     "commands": [
       {
-        "command": "mermaid.openGantt",
-        "title": "Ganttエディタを開く",
+        "command": "mermaid.openEditor",
+        "title": "Mermaidエディタを開く",
         "category": "Mermaid",
         "icon": {
           "light": "media/icon.png",
@@ -41,42 +41,39 @@
         }
       },
       {
+        "command": "mermaid.openGantt",
+        "title": "Ganttエディタを開く",
+        "category": "Mermaid"
+      },
+      {
         "command": "mermaid.openFlowchart",
         "title": "フローチャートエディタを開く",
-        "category": "Mermaid",
-        "icon": {
-          "light": "media/icon.png",
-          "dark": "media/icon.png"
-        }
+        "category": "Mermaid"
       }
     ],
     "menus": {
       "editor/title": [
         {
-          "command": "mermaid.openGantt",
-          "when": "editorLangId == markdown",
-          "group": "navigation"
-        },
-        {
-          "command": "mermaid.openFlowchart",
+          "command": "mermaid.openEditor",
           "when": "editorLangId == markdown",
           "group": "navigation"
         }
       ],
       "explorer/context": [
         {
-          "command": "mermaid.openGantt",
-          "when": "resourceExtname == .md",
-          "group": "navigation"
-        },
-        {
-          "command": "mermaid.openFlowchart",
+          "command": "mermaid.openEditor",
           "when": "resourceExtname == .md",
           "group": "navigation"
         }
       ]
     },
     "keybindings": [
+      {
+        "command": "mermaid.openEditor",
+        "key": "ctrl+shift+m",
+        "mac": "cmd+shift+m",
+        "when": "editorLangId == markdown"
+      },
       {
         "command": "mermaid.openGantt",
         "key": "ctrl+shift+g",

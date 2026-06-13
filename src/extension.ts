@@ -22,7 +22,28 @@ export function activate(context: vscode.ExtensionContext): void {
     EditorPanel.createOrShow(context.extensionUri, editor.document, type);
   };
 
+  const openAuto = (uri?: vscode.Uri) => {
+    if (uri) {
+      vscode.workspace.openTextDocument(uri).then(doc => {
+        EditorPanel.createOrShow(context.extensionUri, doc);
+      });
+      return;
+    }
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      vscode.window.showErrorMessage('まず .mmd または .md ファイルを開いてください。');
+      return;
+    }
+    const lang = editor.document.languageId;
+    if (lang !== 'mermaid' && lang !== 'markdown') {
+      vscode.window.showErrorMessage('エディタは .mmd または .md ファイルにのみ対応しています。');
+      return;
+    }
+    EditorPanel.createOrShow(context.extensionUri, editor.document);
+  };
+
   context.subscriptions.push(
+    vscode.commands.registerCommand('mermaid.openEditor', openAuto),
     vscode.commands.registerCommand('mermaid.openGantt', (uri?: vscode.Uri) =>
       openEditor(uri, 'gantt')
     ),
