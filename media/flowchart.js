@@ -10,6 +10,7 @@
   let isDark = false;
   let undoStack = [];
   let isOperating = false;
+  let isFirstRender = true;
 
   // Pan/zoom state
   let tx = 0, ty = 0, scale = 1;
@@ -60,6 +61,10 @@
         await renderDiagram();
         syncDirectionDropdown();
         setControlsEnabled(true);
+        if (isFirstRender) {
+          isFirstRender = false;
+          setTimeout(fitView, 50);
+        }
         break;
       case 'saved':
         showStatus('保存済み');

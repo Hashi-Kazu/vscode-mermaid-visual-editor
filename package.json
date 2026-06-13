@@ -2,7 +2,7 @@
   "name": "vscode-mermaid-visual-editor",
   "displayName": "Markdown マーメイドビジュアルエディタ",
   "description": "Mermaid記法の図をリアルタイムプレビュー・編集するVS Code拡張機能",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "publisher": "Hashi-Kazu",
   "repository": {
     "type": "git",

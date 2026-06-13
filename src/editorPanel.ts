@@ -216,8 +216,20 @@ export class EditorPanel {
       const newCode = ganttToCode(data);
       const docText = this._document.getText();
       const newDocText = ganttApply(docText, this._document.fileName, newCode);
-      await this._writeRaw(newDocText);
-      this._panel.webview.postMessage({ type: 'saved' });
+      const edit = new vscode.WorkspaceEdit();
+      edit.replace(
+        this._document.uri,
+        new vscode.Range(
+          this._document.positionAt(0),
+          this._document.positionAt(docText.length)
+        ),
+        newDocText
+      );
+      const ok = await vscode.workspace.applyEdit(edit);
+      if (ok) {
+        await this._document.save();
+        this._panel.webview.postMessage({ type: 'saved' });
+      }
     } finally {
       this._isOperating = false;
     }
@@ -398,6 +410,10 @@ export class EditorPanel {
       }
     } finally {
       this._isOperating = false;
+    }
+    // Flowchart: after write, send updated rawCode so webview re-renders
+    if (this._type === 'flowchart') {
+      this._sendFlowchartUpdate();
     }
   }
 
