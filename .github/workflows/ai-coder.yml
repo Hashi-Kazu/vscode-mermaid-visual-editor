@@ -1,0 +1,58 @@
+name: AI Coder
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  ai-code:
+    if: github.event.label.name == 'ai-task'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: |
+            あなたは vscode-mermaid-visual-editor（TypeScript + esbuild の VS Code 拡張機能）の開発エージェントです。
+
+            以下の Issue を実装・修正してください。
+
+            Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
+
+            Issue 本文:
+            ${{ github.event.issue.body }}
+
+            ## 作業手順
+
+            1. リポジトリのコードを読んで現状を把握する
+            2. Issue の要求を実装・修正する
+               - エントリポイント: `src/extension.ts`
+               - パネル制御: `src/ganttPanel.ts`
+               - Mermaid パーサー: `src/ganttParser.ts`
+               - シリアライザー: `src/ganttSerializer.ts`
+               - 型定義: `src/types.ts`
+               - Webview UI: `media/gantt.js`、`media/gantt.css`
+            3. `feature/issue-${{ github.event.issue.number }}` ブランチを作成して変更をコミットする
+               - コミットメッセージは日本語で簡潔に（例: `feat: ○○機能を追加 (#${{ github.event.issue.number }})`）
+            4. main ブランチへの draft PR を作成する
+               - PR タイトル: `feat: ${{ github.event.issue.title }}`
+               - PR 本文に変更内容のサマリーと `Closes #${{ github.event.issue.number }}` を含める
+
+            ## 注意事項
+
+            - ビルドは `npm run build`（esbuild → dist/extension.js）
+            - Webview と Extension 間の通信は `src/types.ts` の型定義に従う
+            - Mermaid.js は `media/mermaid.min.js` として静的配置（バンドルに含めない）
+            - `CLAUDE.md` をコード構成・規約の参照として読むこと
+            - コメントは WHY が非自明な場合のみ書く
+          claude_args: |
+            --max-turns 50
+            --dangerously-skip-permissions
