@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   ai-code:
-    if: github.event.label.name == 'claude'
+    if: github.event.label.name == 'ai-task'
     runs-on: ubuntu-latest
 
     steps:
