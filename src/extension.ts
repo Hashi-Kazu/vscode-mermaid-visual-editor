@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { GanttPanel } from './ganttPanel';
+import { FlowchartPanel } from './flowchartPanel';
 
 export function activate(context: vscode.ExtensionContext): void {
   const ganttCmd = vscode.commands.registerCommand(
@@ -25,7 +26,30 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   );
 
-  context.subscriptions.push(ganttCmd);
+  const flowchartCmd = vscode.commands.registerCommand(
+    'mermaid.openFlowchart',
+    (uri?: vscode.Uri) => {
+      if (uri) {
+        vscode.workspace.openTextDocument(uri).then(doc => {
+          FlowchartPanel.createOrShow(context.extensionUri, doc);
+        });
+        return;
+      }
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showErrorMessage('まず .md ファイルを開いてください。');
+        return;
+      }
+      const lang = editor.document.languageId;
+      if (lang !== 'mermaid' && lang !== 'markdown') {
+        vscode.window.showErrorMessage('フローチャートエディタは .mmd または .md ファイルにのみ対応しています。');
+        return;
+      }
+      FlowchartPanel.createOrShow(context.extensionUri, editor.document);
+    }
+  );
+
+  context.subscriptions.push(ganttCmd, flowchartCmd);
 }
 
 export function deactivate(): void {}

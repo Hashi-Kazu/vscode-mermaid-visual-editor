@@ -1,0 +1,239 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Toolbar ── */
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--vscode-editorGroupHeader-tabsBackground);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+#toolbar button {
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 3px;
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+#toolbar button:hover { background: var(--vscode-button-secondaryHoverBackground); }
+#toolbar button:disabled { opacity: 0.4; cursor: default; }
+
+.toolbar-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--vscode-panel-border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+.toolbar-label {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+}
+#sel-direction {
+  font-size: 11px;
+  background: var(--vscode-dropdown-background, var(--vscode-input-background));
+  color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
+  border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border));
+  border-radius: 3px;
+  padding: 2px 4px;
+  cursor: pointer;
+  outline: none;
+}
+#sel-direction:disabled { opacity: 0.4; cursor: default; }
+
+#status-label {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+#status-label.show { opacity: 1; }
+
+/* ── Canvas wrapper (scroll + pan) ── */
+#canvas-wrap {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  cursor: default;
+}
+
+#canvas {
+  position: absolute;
+  top: 0; left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+#mermaid-container {
+  padding: 24px;
+  min-width: 100px;
+  min-height: 100px;
+}
+
+#mermaid-container svg {
+  display: block;
+  max-width: none;
+}
+
+/* ── Port handles ── */
+.fc-port {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--vscode-focusBorder);
+  border: 2px solid var(--vscode-editor-background);
+  cursor: crosshair;
+  pointer-events: all;
+  z-index: 20;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.fc-port.visible { opacity: 1; }
+
+/* ── Drag edge line ── */
+#drag-edge-svg {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 50;
+  display: none;
+}
+#drag-edge-svg.active { display: block; }
+#drag-edge-line {
+  stroke: var(--vscode-focusBorder);
+  stroke-width: 2;
+  stroke-dasharray: 5 3;
+  fill: none;
+}
+
+/* ── Node hover highlight ── */
+.fc-node-hover rect,
+.fc-node-hover polygon,
+.fc-node-hover circle,
+.fc-node-hover ellipse,
+.fc-node-hover path.node-shape {
+  filter: brightness(1.15);
+}
+.fc-node-drop-target rect,
+.fc-node-drop-target polygon,
+.fc-node-drop-target circle,
+.fc-node-drop-target ellipse {
+  stroke: var(--vscode-focusBorder) !important;
+  stroke-width: 2.5px !important;
+}
+
+/* ── Inline edit input ── */
+#fc-edit-overlay {
+  position: fixed;
+  z-index: 100;
+  display: none;
+}
+#fc-edit-overlay.visible { display: block; }
+#fc-edit-input {
+  border: 2px solid var(--vscode-focusBorder);
+  border-radius: 4px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  font-size: 13px;
+  font-family: var(--vscode-font-family);
+  padding: 3px 8px;
+  outline: none;
+  min-width: 80px;
+  text-align: center;
+}
+
+/* ── Context menu ── */
+.fc-menu {
+  position: fixed;
+  background: var(--vscode-menu-background);
+  border: 1px solid var(--vscode-menu-border);
+  border-radius: 4px;
+  padding: 4px 0;
+  z-index: 200;
+  min-width: 140px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.fc-menu-item {
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--vscode-menu-foreground);
+  white-space: nowrap;
+}
+.fc-menu-item:hover {
+  background: var(--vscode-menu-selectionBackground);
+  color: var(--vscode-menu-selectionForeground);
+}
+.fc-menu-sep {
+  height: 1px;
+  background: var(--vscode-menu-separatorBackground);
+  margin: 4px 0;
+}
+
+/* ── Error panel ── */
+#error-panel {
+  position: absolute;
+  top: 8px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+  border: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
+  color: var(--vscode-inputValidation-errorForeground, #fff);
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-size: 12px;
+  z-index: 30;
+  display: none;
+  max-width: 80%;
+}
+#error-panel.visible { display: block; }
+
+/* ── Empty overlay ── */
+#empty-overlay {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 14px;
+  position: absolute;
+  inset: 0;
+  background: var(--vscode-editor-background);
+  z-index: 10;
+}
+#empty-overlay.visible { display: flex; }
+#empty-overlay p { margin: 0; }
+#btn-init-flowchart {
+  padding: 8px 20px;
+  font-size: 13px;
+  cursor: pointer;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+#btn-init-flowchart:hover { background: var(--vscode-button-hoverBackground); }

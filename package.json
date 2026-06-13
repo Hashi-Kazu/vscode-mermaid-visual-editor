@@ -2,7 +2,7 @@
   "name": "vscode-mermaid-visual-editor",
   "displayName": "Markdown マーメイドビジュアルエディタ",
   "description": "Mermaid記法の図をリアルタイムプレビュー・編集するVS Code拡張機能",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "publisher": "Hashi-Kazu",
   "repository": {
     "type": "git",
@@ -18,7 +18,7 @@
     "vscode": "^1.85.0"
   },
   "categories": ["Other", "Visualization"],
-  "keywords": ["mermaid", "diagram", "gantt", "editor", "visualization"],
+  "keywords": ["mermaid", "diagram", "gantt", "flowchart", "editor", "visualization"],
   "activationEvents": [
     "onLanguage:markdown"
   ],
@@ -39,6 +39,15 @@
           "light": "media/icon.png",
           "dark": "media/icon.png"
         }
+      },
+      {
+        "command": "mermaid.openFlowchart",
+        "title": "フローチャートエディタを開く",
+        "category": "Mermaid",
+        "icon": {
+          "light": "media/icon.png",
+          "dark": "media/icon.png"
+        }
       }
     ],
     "menus": {
@@ -47,11 +56,21 @@
           "command": "mermaid.openGantt",
           "when": "editorLangId == markdown",
           "group": "navigation"
+        },
+        {
+          "command": "mermaid.openFlowchart",
+          "when": "editorLangId == markdown",
+          "group": "navigation"
         }
       ],
       "explorer/context": [
         {
           "command": "mermaid.openGantt",
+          "when": "resourceExtname == .md",
+          "group": "navigation"
+        },
+        {
+          "command": "mermaid.openFlowchart",
           "when": "resourceExtname == .md",
           "group": "navigation"
         }
@@ -62,6 +81,12 @@
         "command": "mermaid.openGantt",
         "key": "ctrl+shift+g",
         "mac": "cmd+shift+g",
+        "when": "editorLangId == markdown"
+      },
+      {
+        "command": "mermaid.openFlowchart",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f",
         "when": "editorLangId == markdown"
       }
     ]

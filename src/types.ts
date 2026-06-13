@@ -19,13 +19,13 @@ export interface GanttTask {
   afterId?: string;  // dependency: `after <id>`
 }
 
-// Extension → Webview
+// Extension → Webview (Gantt)
 export type ExtToWeb =
   | { type: 'update'; gantt: GanttData }
   | { type: 'saved' }
   | { type: 'empty' };
 
-// Webview → Extension
+// Webview → Extension (Gantt)
 export type WebToExt =
   | { type: 'ready' }
   | { type: 'initGantt' }
@@ -35,4 +35,52 @@ export type WebToExt =
   | { type: 'editSection'; si: number; name: string }
   | { type: 'addSection'; name: string }
   | { type: 'structuralEdit'; gantt: GanttData }
+  | { type: 'save' };
+
+// ── MermaidPanel (preview) types ─────────────────────────────────────────────
+export type ExtensionToWebview =
+  | { type: 'render'; code: string; theme: string };
+
+export type WebviewToExtension =
+  | { type: 'ready' };
+
+// ── Flowchart types ──────────────────────────────────────────────────────────
+
+export interface FlowchartData {
+  direction: 'TD' | 'LR' | 'BT' | 'RL';
+  keyword: 'flowchart' | 'graph';
+  nodes: FlowchartNode[];
+  edges: FlowchartEdge[];
+}
+
+export interface FlowchartNode {
+  id: string;
+  label: string;
+}
+
+export interface FlowchartEdge {
+  id: string;      // `${from}::${to}::${idx}` for disambiguation
+  from: string;
+  to: string;
+  label?: string;
+}
+
+// Extension → Webview (Flowchart)
+export type FlowExtToWeb =
+  | { type: 'update'; rawCode: string; isDark: boolean }
+  | { type: 'saved' }
+  | { type: 'empty' };
+
+// Webview → Extension (Flowchart)
+export type FlowWebToExt =
+  | { type: 'ready' }
+  | { type: 'initFlowchart' }
+  | { type: 'editNode'; nodeId: string; label: string }
+  | { type: 'addNode' }
+  | { type: 'deleteNode'; nodeId: string }
+  | { type: 'addEdge'; from: string; to: string }
+  | { type: 'editEdge'; from: string; to: string; idx: number; label: string }
+  | { type: 'deleteEdge'; from: string; to: string; idx: number }
+  | { type: 'setDirection'; direction: string }
+  | { type: 'undo'; code: string }
   | { type: 'save' };
