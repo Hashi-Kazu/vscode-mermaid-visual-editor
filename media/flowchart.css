@@ -145,6 +145,21 @@ body {
   stroke-width: 2.5px !important;
 }
 
+/* ── Selected node / edge ── */
+g.node.fc-selected rect,
+g.node.fc-selected polygon,
+g.node.fc-selected circle,
+g.node.fc-selected ellipse {
+  stroke: var(--vscode-focusBorder) !important;
+  stroke-width: 2.5px !important;
+  filter: brightness(1.1);
+}
+.edgePath.fc-selected path,
+path.flowchart-link.fc-selected {
+  stroke: var(--vscode-focusBorder) !important;
+  stroke-width: 3px !important;
+}
+
 /* ── Inline edit input ── */
 #fc-edit-overlay {
   position: fixed;

@@ -11,6 +11,8 @@
   let undoStack = [];
   let isOperating = false;
   let isFirstRender = true;
+  let selectedNodeId = null;
+  let selectedEdge = null; // { el, from, to, idx }
 
   // Pan/zoom state
   let tx = 0, ty = 0, scale = 1;
@@ -87,6 +89,7 @@
   // ── Render ───────────────────────────────────────────────────────────────
   let renderId = 0;
   async function renderDiagram() {
+    clearSelection();
     if (!rawCode) return;
 
     mermaid.initialize({
@@ -145,8 +148,12 @@
 
       nodeRegistry.set(nodeId, { el: nodeEl });
 
-      // Double-click to edit label
+      // Click to select, double-click to edit
       nodeEl.style.cursor = 'pointer';
+      nodeEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectNode(nodeId);
+      });
       nodeEl.addEventListener('dblclick', (e) => {
         e.stopPropagation();
         startNodeLabelEdit(nodeId);
@@ -197,6 +204,10 @@
 
       edgeEl.style.cursor = 'pointer';
       edgeEl.setAttribute('stroke-width', edgeEl.getAttribute('stroke-width') || '2');
+      edgeEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectEdge(entry);
+      });
 
       edgeEl.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -512,6 +523,12 @@
     canvas.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
   }
 
+  canvasWrap.addEventListener('click', (e) => {
+    if (!e.target.closest('g.node, .edgePath, .edgeLabel')) {
+      clearSelection();
+    }
+  });
+
   canvasWrap.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     const target = e.target;
@@ -536,19 +553,43 @@
   });
 
   canvasWrap.addEventListener('wheel', (e) => {
-    if (e.ctrlKey) {
-      e.preventDefault();
-      const rect = canvasWrap.getBoundingClientRect();
-      const mx = e.clientX - rect.left;
-      const my = e.clientY - rect.top;
-      const factor = e.deltaY < 0 ? 1.1 : 0.9;
-      const newScale = Math.max(0.1, Math.min(4, scale * factor));
-      tx = mx - (mx - tx) * (newScale / scale);
-      ty = my - (my - ty) * (newScale / scale);
-      scale = newScale;
-      setTransform();
-    }
+    e.preventDefault();
+    const rect = canvasWrap.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    const newScale = Math.max(0.1, Math.min(4, scale * factor));
+    tx = mx - (mx - tx) * (newScale / scale);
+    ty = my - (my - ty) * (newScale / scale);
+    scale = newScale;
+    setTransform();
   }, { passive: false });
+
+  // ── Selection ─────────────────────────────────────────────────────────────
+  function selectNode(nodeId) {
+    clearSelection();
+    selectedNodeId = nodeId;
+    const entry = nodeRegistry.get(nodeId);
+    if (entry) entry.el.classList.add('fc-selected');
+  }
+
+  function selectEdge(edgeEntry) {
+    clearSelection();
+    selectedEdge = edgeEntry;
+    edgeEntry.el.classList.add('fc-selected');
+  }
+
+  function clearSelection() {
+    if (selectedNodeId) {
+      const entry = nodeRegistry.get(selectedNodeId);
+      if (entry) entry.el.classList.remove('fc-selected');
+      selectedNodeId = null;
+    }
+    if (selectedEdge) {
+      selectedEdge.el.classList.remove('fc-selected');
+      selectedEdge = null;
+    }
+  }
 
   // ── Fit view ─────────────────────────────────────────────────────────────
   function fitView() {
@@ -617,6 +658,21 @@
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
       send({ type: 'save' });
+    }
+    if (e.key === 'Delete') {
+      if (selectedNodeId) {
+        e.preventDefault();
+        pushUndo();
+        const nid = selectedNodeId;
+        clearSelection();
+        send({ type: 'deleteNode', nodeId: nid });
+      } else if (selectedEdge) {
+        e.preventDefault();
+        pushUndo();
+        const { from, to, idx } = selectedEdge;
+        clearSelection();
+        send({ type: 'deleteEdge', from, to, idx });
+      }
     }
   });
 
