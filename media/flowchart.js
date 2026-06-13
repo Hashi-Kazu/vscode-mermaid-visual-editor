@@ -63,7 +63,7 @@
         setControlsEnabled(true);
         if (isFirstRender) {
           isFirstRender = false;
-          setTimeout(fitView, 50);
+          scheduleFirstFit(0);
         }
         break;
       case 'saved':
@@ -554,31 +554,48 @@
   function fitView() {
     const svgEl = container.querySelector('svg');
     if (!svgEl) return;
-    const svgBBox = svgEl.getBBox ? svgEl.getBBox() : null;
-    const wrap = canvasWrap.getBoundingClientRect();
-    const pad = 32;
 
-    let w, h;
-    if (svgBBox && svgBBox.width > 0) {
-      w = svgBBox.width + pad * 2;
-      h = svgBBox.height + pad * 2;
+    const wrap = canvasWrap.getBoundingClientRect();
+    if (wrap.width <= 0 || wrap.height <= 0) return; // panel not yet laid out
+
+    // Use viewBox dimensions as the SVG's natural rendered size
+    // (when no explicit width/height, viewBox width/height = CSS pixels in browser)
+    let svgW = 0, svgH = 0;
+    const vb = svgEl.viewBox && svgEl.viewBox.baseVal;
+    if (vb && vb.width > 0) {
+      svgW = vb.width;
+      svgH = vb.height;
     } else {
-      const svgRect = svgEl.getBoundingClientRect();
-      w = svgRect.width + pad * 2;
-      h = svgRect.height + pad * 2;
+      const bb = svgEl.getBBox ? svgEl.getBBox() : null;
+      if (bb && bb.width > 0) { svgW = bb.width; svgH = bb.height; }
     }
+    if (svgW <= 0 || svgH <= 0) return;
+
+    const containerPad = 48; // 24px each side from #mermaid-container
+    const canvasW = svgW + containerPad;
+    const canvasH = svgH + containerPad;
+    const margin = 32;
 
     const newScale = Math.min(
-      (wrap.width - pad * 2) / w,
-      (wrap.height - pad * 2) / h,
+      (wrap.width  - margin) / canvasW,
+      (wrap.height - margin) / canvasH,
       2
     );
     scale = Math.max(0.1, newScale);
-    const scaledW = w * scale;
-    const scaledH = h * scale;
-    tx = (wrap.width - scaledW) / 2 + pad * scale;
-    ty = (wrap.height - scaledH) / 2 + pad * scale;
+    tx = (wrap.width  - canvasW * scale) / 2;
+    ty = (wrap.height - canvasH * scale) / 2;
     setTransform();
+  }
+
+  // Retry helper for first-render auto-fit: panel layout may not be ready at t=0
+  function scheduleFirstFit(tries) {
+    const wrap = canvasWrap.getBoundingClientRect();
+    if (wrap.width > 0 && wrap.height > 0) {
+      fitView();
+    } else if (tries < 6) {
+      setTimeout(() => scheduleFirstFit(tries + 1), 150);
+    }
+    // else: give up — user can click 全体表示
   }
 
   // ── Undo ──────────────────────────────────────────────────────────────────
