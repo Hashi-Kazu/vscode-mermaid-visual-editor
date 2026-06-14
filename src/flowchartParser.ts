@@ -1,4 +1,4 @@
-import { FlowchartData, FlowchartNode, FlowchartEdge } from './types';
+import { FlowchartData, FlowchartNode, FlowchartEdge, EdgeStyle } from './types';
 
 export function parseFlowchart(text: string): FlowchartData | null {
   let code = text.trim();
@@ -52,23 +52,32 @@ function parseCode(code: string): FlowchartData | null {
   return { direction, keyword, nodes, edges };
 }
 
+function connectorToStyle(connector: string): EdgeStyle {
+  if (connector === '-.->') return 'dotted-arrow';
+  if (connector === '==>') return 'thick-arrow';
+  if (connector === '---') return 'solid-no-arrow';
+  if (connector === '-.-') return 'dotted-no-arrow';
+  return 'solid-arrow';
+}
+
 function parseLine(
   line: string,
   nodeMap: Map<string, string>,
   edges: FlowchartEdge[],
   edgeCounts: Map<string, number>
 ): void {
-  // Pattern 1: A -->|label| B
-  let m = line.match(/^(.+?)\s*-->\|([^|]*)\|\s*(.+)$/);
-  if (m) { addEdge(m[1], m[3], m[2].trim() || undefined, nodeMap, edges, edgeCounts); return; }
+  // Pattern 1: A connector|label| B (all connector types with pipe label)
+  // -.-> before -.- to avoid premature partial match
+  let m = line.match(/^(.+?)\s*(-.->|-\.-|==>|---|-->)\|([^|]*)\|\s*(.+)$/);
+  if (m) { addEdge(m[1], m[4], m[3].trim() || undefined, m[2], nodeMap, edges, edgeCounts); return; }
 
   // Pattern 2: A -- label --> B
   m = line.match(/^(.+?)\s*--\s+(.+?)\s+-->\s*(.+)$/);
-  if (m) { addEdge(m[1], m[3], m[2].trim() || undefined, nodeMap, edges, edgeCounts); return; }
+  if (m) { addEdge(m[1], m[3], m[2].trim() || undefined, '-->', nodeMap, edges, edgeCounts); return; }
 
-  // Pattern 3: simple arrows
-  m = line.match(/^(.+?)\s*(-->|---|-->>|-\.->|==>|~~~)\s*(.+)$/);
-  if (m) { addEdge(m[1], m[3], undefined, nodeMap, edges, edgeCounts); return; }
+  // Pattern 3: simple arrows (no label)
+  m = line.match(/^(.+?)\s*(-->|---|-->>|-\.->|==>|~~~|-\.-)\s*(.+)$/);
+  if (m) { addEdge(m[1], m[3], undefined, m[2], nodeMap, edges, edgeCounts); return; }
 
   // Standalone node definition
   const node = extractNode(line.trim());
@@ -79,6 +88,7 @@ function addEdge(
   fromToken: string,
   toToken: string,
   label: string | undefined,
+  connector: string,
   nodeMap: Map<string, string>,
   edges: FlowchartEdge[],
   edgeCounts: Map<string, number>
@@ -92,7 +102,7 @@ function addEdge(
   const key = `${from.id}::${to.id}`;
   const idx = edgeCounts.get(key) ?? 0;
   edgeCounts.set(key, idx + 1);
-  edges.push({ id: `${from.id}::${to.id}::${idx}`, from: from.id, to: to.id, label });
+  edges.push({ id: `${from.id}::${to.id}::${idx}`, from: from.id, to: to.id, label, style: connectorToStyle(connector) });
 }
 
 function extractNode(token: string): { id: string; label: string } | null {

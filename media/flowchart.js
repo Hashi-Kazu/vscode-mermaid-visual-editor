@@ -521,6 +521,40 @@
       editState = { kind: 'edge', edgeInfo };
       showEditInput(bbox, currentLabel);
     });
+
+    // スタイル変更サブメニュー
+    const styleItem = document.createElement('div');
+    styleItem.className = 'fc-menu-item fc-menu-submenu';
+    styleItem.textContent = '↔ スタイルを変更';
+    const styleArrow = document.createElement('span');
+    styleArrow.className = 'fc-menu-arrow';
+    styleArrow.textContent = '▶';
+    styleItem.appendChild(styleArrow);
+
+    const edgeStyles = [
+      { style: 'solid-arrow',    label: '実線矢印  (-->)' },
+      { style: 'dotted-arrow',   label: '点線矢印  (-.->' },
+      { style: 'thick-arrow',    label: '太線矢印  (==>' },
+      { style: 'solid-no-arrow', label: '矢印なし実線  (---)' },
+      { style: 'dotted-no-arrow', label: '矢印なし点線  (-.-)'  },
+    ];
+    const styleSubMenu = document.createElement('div');
+    styleSubMenu.className = 'fc-menu fc-submenu';
+    edgeStyles.forEach(({ style, label }) => {
+      const subItem = document.createElement('div');
+      subItem.className = 'fc-menu-item';
+      subItem.textContent = label;
+      subItem.addEventListener('mousedown', (ev) => {
+        ev.preventDefault();
+        pushUndo();
+        send({ type: 'changeEdgeStyle', from: edgeInfo.from, to: edgeInfo.to, idx: edgeInfo.idx, style });
+        closeContextMenu();
+      });
+      styleSubMenu.appendChild(subItem);
+    });
+    styleItem.appendChild(styleSubMenu);
+    menu.appendChild(styleItem);
+
     const sep = document.createElement('div'); sep.className = 'fc-menu-sep'; menu.appendChild(sep);
     addItem('✕ エッジを削除', () => {
       pushUndo();

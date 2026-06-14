@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { parseFlowchart } from './flowchartParser';
 import {
   setDirection, editNodeLabel, addNode, deleteNode,
-  addEdge, editEdgeLabel, deleteEdge, applyToDocument,
+  addEdge, editEdgeLabel, deleteEdge, changeEdgeStyle, applyToDocument,
   changeNodeShape,
 } from './flowchartSerializer';
 import { FlowWebToExt } from './types';
@@ -61,7 +61,8 @@ export class FlowchartPanel {
           case 'changeNodeShape': await this._applyOp(c => changeNodeShape(c, msg.nodeId, msg.shape)); break;
           case 'addEdge':         await this._applyOp(c => addEdge(c, msg.from, msg.to)); break;
           case 'editEdge':      await this._applyOp(c => editEdgeLabel(c, msg.from, msg.to, msg.idx, msg.label)); break;
-          case 'deleteEdge':    await this._applyOp(c => deleteEdge(c, msg.from, msg.to, msg.idx)); break;
+          case 'deleteEdge':       await this._applyOp(c => deleteEdge(c, msg.from, msg.to, msg.idx)); break;
+          case 'changeEdgeStyle': await this._applyOp(c => changeEdgeStyle(c, msg.from, msg.to, msg.idx, msg.style)); break;
           case 'setDirection':  await this._applyOp(c => setDirection(c, msg.direction)); break;
           case 'undo':          await this._applyRaw(msg.code); break;
           case 'save':          await this._document.save(); this._panel.webview.postMessage({ type: 'saved' }); break;

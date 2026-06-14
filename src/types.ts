@@ -46,6 +46,13 @@ export type WebviewToExtension =
 
 // ── Flowchart types ──────────────────────────────────────────────────────────
 
+export type EdgeStyle =
+  | 'solid-arrow'      // A --> B
+  | 'dotted-arrow'     // A -.-> B
+  | 'thick-arrow'      // A ==> B
+  | 'solid-no-arrow'   // A --- B
+  | 'dotted-no-arrow'; // A -.- B
+
 export interface FlowchartData {
   direction: 'TD' | 'LR' | 'BT' | 'RL';
   keyword: 'flowchart' | 'graph';
@@ -66,6 +73,7 @@ export interface FlowchartEdge {
   from: string;
   to: string;
   label?: string;
+  style?: EdgeStyle;
 }
 
 // Extension → Webview (Flowchart)
@@ -85,6 +93,7 @@ export type FlowWebToExt =
   | { type: 'addEdge'; from: string; to: string }
   | { type: 'editEdge'; from: string; to: string; idx: number; label: string }
   | { type: 'deleteEdge'; from: string; to: string; idx: number }
+  | { type: 'changeEdgeStyle'; from: string; to: string; idx: number; style: EdgeStyle }
   | { type: 'setDirection'; direction: string }
   | { type: 'undo'; code: string }
   | { type: 'save' }
