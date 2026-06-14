@@ -174,7 +174,7 @@ export function deleteEdge(code: string, from: string, to: string, idx: number):
 export function applyToDocument(docText: string, fileName: string, newCode: string): string {
   if (fileName.endsWith('.mmd')) return newCode;
   const replaced = docText.replace(
-    /(```mermaid[ \t]*\n)([\s\S]*?)(```)/,
+    /(```mermaid[ \t]*\r?\n)([\s\S]*?)(```)/,
     (_, open, body, close) => {
       if (/^(flowchart|graph)\s+/im.test(body)) {
         return open + newCode + '\n' + close;
