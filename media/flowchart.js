@@ -583,7 +583,10 @@
     if (currentMenu && !currentMenu.contains(e.target)) closeContextMenu();
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeContextMenu();
+    if (e.key === 'Escape') {
+      closeContextMenu();
+      clearSelection();
+    }
   });
 
   // ── Pan / Zoom ────────────────────────────────────────────────────────────
@@ -741,7 +744,7 @@
       e.preventDefault();
       send({ type: 'save' });
     }
-    if (e.key === 'Delete') {
+    if (e.key === 'Delete' || e.key === 'Backspace') {
       if (selectedNodeId) {
         e.preventDefault();
         pushUndo();
