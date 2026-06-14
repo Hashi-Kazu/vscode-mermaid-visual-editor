@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.7] — 2026-06-14
+
+### 修正
+- フローチャートエディタでラベル編集・エラー表示・エッジドラッグが動作しないバグを修正 (#3)
+  - `_buildHtml()` に `#error-panel`・`#fc-edit-overlay`・`#fc-edit-input`・`#drag-edge-svg`・`#drag-edge-line` を追加
+
 ## [1.2.0] — 2026-06-12
 
 ### 変更

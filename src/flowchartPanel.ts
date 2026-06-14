@@ -213,11 +213,18 @@ export class FlowchartPanel {
     <div id="canvas">
       <div id="mermaid-container"></div>
     </div>
+    <div id="error-panel"></div>
   </div>
   <div id="empty-overlay">
     <p>フローチャートが見つかりません</p>
     <button id="btn-init-flowchart">＋ フローチャートを挿入</button>
   </div>
+  <div id="fc-edit-overlay">
+    <input id="fc-edit-input" type="text">
+  </div>
+  <svg id="drag-edge-svg" xmlns="http://www.w3.org/2000/svg">
+    <line id="drag-edge-line"></line>
+  </svg>
   <script nonce="${nonce}" src="${uri('mermaid.min.js')}"></script>
   <script nonce="${nonce}" src="${uri('flowchart.js')}"></script>
 </body>
