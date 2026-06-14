@@ -205,11 +205,18 @@
     });
 
     // ── Edge labels ──
-    const labelEls = svgEl.querySelectorAll('.edgeLabel');
-    labelEls.forEach(labelEl => {
-      const edgeId = labelEl.id ? labelEl.id.replace(/-label$/, '') : null;
-      if (!edgeId) return;
-      const edgeInfo = findEdgeByDomId(edgeId);
+    // Mermaid の edgeLabel id は バージョンによって "L-A-B-0-label" / "L_A_B_0" など
+    // 書式が不安定なため id に依存せず、edgePath と edgeLabel の DOM 順序（index）が
+    // 対応することを利用して from/to を解決する。
+    const labelEls = Array.from(svgEl.querySelectorAll('.edgeLabel'));
+    // LS-* クラスを持つ edgePath だけを対象にする（補助パスを除外）
+    const labeledPaths = edgeRegistry.map(e => e.el).filter(el =>
+      Array.from(el.classList).some(c => c.startsWith('LS-'))
+    );
+
+    labelEls.forEach((labelEl, idx) => {
+      // DOM 順序で対応する edgeRegistry エントリを引く
+      const edgeInfo = edgeRegistry[idx] ?? null;
       if (!edgeInfo) return;
       edgeInfo.labelEl = labelEl;
 
@@ -254,15 +261,8 @@
     return null;
   }
 
-  function findEdgeByDomId(domId) {
-    // domId e.g. "L-A-B-0" or "L_A_B_0"
-    const edgeEl = container.querySelector(`#${CSS.escape(domId)}`);
-    if (!edgeEl) return null;
-    const info = getEdgeInfo(edgeEl);
-    if (!info) return null;
-    const key = `${info.from}::${info.to}`;
-    // Find matching entry in edgeRegistry
-    return edgeRegistry.find(e => e.from === info.from && e.to === info.to) || null;
+  function findEdgeByFromTo(from, to) {
+    return edgeRegistry.find(e => e.from === from && e.to === to) || null;
   }
 
   function getLabelText(labelEl) {
