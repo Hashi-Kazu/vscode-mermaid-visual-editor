@@ -761,7 +761,7 @@
 
   selDirection.addEventListener('change', () => {
     pushUndo();
-    send({ type: 'setDirection', direction: selDirection.value });
+    send({ type: 'changeDirection', direction: selDirection.value });
   });
 
   document.getElementById('btn-init-flowchart').addEventListener('click', () => {
