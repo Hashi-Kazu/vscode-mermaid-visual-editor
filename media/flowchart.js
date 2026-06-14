@@ -300,7 +300,8 @@
       port.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        startPortDrag(nodeId, e.clientX, e.clientY);
+        // ポート div は 10×10px なので中心から線を引く
+        startPortDrag(nodeId, pos.x + 5, pos.y + 5);
       });
     });
     portElements.set(nodeId, ports);
