@@ -53,9 +53,12 @@ export interface FlowchartData {
   edges: FlowchartEdge[];
 }
 
+export type NodeShape = 'rect' | 'round' | 'diamond' | 'stadium' | 'circle';
+
 export interface FlowchartNode {
   id: string;
   label: string;
+  shape: NodeShape;
 }
 
 export interface FlowchartEdge {
@@ -78,6 +81,7 @@ export type FlowWebToExt =
   | { type: 'editNode'; nodeId: string; label: string }
   | { type: 'addNode' }
   | { type: 'deleteNode'; nodeId: string }
+  | { type: 'changeNodeShape'; nodeId: string; shape: NodeShape }
   | { type: 'addEdge'; from: string; to: string }
   | { type: 'editEdge'; from: string; to: string; idx: number; label: string }
   | { type: 'deleteEdge'; from: string; to: string; idx: number }
