@@ -533,7 +533,7 @@ export class EditorPanel {
   <div id="toolbar">
     <button id="btn-add-node">＋ ノード追加</button>
     <button id="btn-undo">↩ 元に戻す</button>
-    <button id="btn-fit">⊡ 全体表示</button>
+    <button id="btn-fit">⊡ リセット</button>
     <button id="btn-export">⬇ エクスポート</button>
     <span class="toolbar-sep"></span>
     <label class="toolbar-label" for="sel-direction">方向</label>

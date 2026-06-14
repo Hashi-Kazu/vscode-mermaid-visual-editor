@@ -260,18 +260,22 @@
   }
 
   function getEdgeInfo(el) {
-    // Try CSS classes: LS-{from} LE-{to}
+    // Mermaid 11 は edgePath の LS-/LE- クラスを実ノードIDではなく
+    // 固定値 "a1"/"b1" で出力するため、from/to の特定には使えない。
+    // 一方で path の id は `[prefix-]L_{from}_{to}_{counter}` 形式で
+    // 実ノードIDを保持しているため、id から from/to を解決する。
+    const id = el.id || '';
+    const mId = id.match(/L[-_](.+?)[-_](.+?)[-_]\d+$/);
+    if (mId) return { from: mId[1], to: mId[2] };
+
+    // Fallback: 旧バージョンの CSS クラス LS-{from} LE-{to}
+    // （"a1"/"b1" は Mermaid 11 のダミー値なので除外する）
     let from = null, to = null;
     el.classList.forEach(cls => {
       if (cls.startsWith('LS-')) from = cls.slice(3);
       if (cls.startsWith('LE-')) to = cls.slice(3);
     });
-    if (from && to) return { from, to };
-
-    // Fallback: parse element id (L-from-to-idx or L_from_to_idx)
-    const id = el.id || '';
-    const mHyphen = id.match(/^L[-_](.+?)[-_](.+?)[-_]\d+$/);
-    if (mHyphen) return { from: mHyphen[1], to: mHyphen[2] };
+    if (from && to && !(from === 'a1' && to === 'b1')) return { from, to };
     return null;
   }
 
@@ -748,7 +752,7 @@
     } else if (tries < 6) {
       setTimeout(() => scheduleFirstFit(tries + 1), 150);
     }
-    // else: give up — user can click 全体表示
+    // else: give up — user can click リセット
   }
 
   // ── Undo ──────────────────────────────────────────────────────────────────
