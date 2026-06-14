@@ -86,10 +86,20 @@ export class FlowchartPanel {
 
   private _sendUpdate(): void {
     const text = this._document.getText();
-    const data = parseFlowchart(text);
     const isDark = vscode.window.activeColorTheme.kind !== vscode.ColorThemeKind.Light;
+    const data = parseFlowchart(text);
     if (!data) {
-      this._panel.webview.postMessage({ type: 'empty' });
+      // mermaid ブロック内に flowchart/graph キーワードがあるのに解析できない場合は構文エラー扱い
+      const blockMatch = text.match(/```mermaid[ \t]*\n([\s\S]*?)```/);
+      const hasFlowchartKeyword = blockMatch && /^(flowchart|graph)\b/im.test(blockMatch[1]);
+      if (hasFlowchartKeyword) {
+        this._panel.webview.postMessage({
+          type: 'parseError',
+          message: 'フローチャートの構文エラー: `flowchart TD` / `graph LR` のように方向（TD/LR/BT/RL）を指定してください。',
+        });
+      } else {
+        this._panel.webview.postMessage({ type: 'empty' });
+      }
       return;
     }
     const rawCode = this._extractRawCode(text);

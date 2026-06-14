@@ -71,7 +71,14 @@
       case 'saved':
         showStatus('保存済み');
         break;
+      case 'parseError':
+        hideEmpty();
+        container.innerHTML = '';
+        showError(msg.message);
+        setControlsEnabled(false);
+        break;
       case 'empty':
+        hideError();
         showEmpty();
         setControlsEnabled(false);
         break;
