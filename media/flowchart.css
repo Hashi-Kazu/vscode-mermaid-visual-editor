@@ -287,7 +287,9 @@ path.flowchart-link.fc-selected {
 
 /* ── ノード形状の差をはっきりさせる ── */
 /* 各シェイプ（矩形・角丸・ひし形・スタジアム・円）の輪郭を太く描き、
-   形の違いを視覚的に判別しやすくする。 */
+   形の違いを視覚的に判別しやすくする。
+   ※ rx/ry のジオメトリは上書きしない（rx="0" の矩形を丸めたり、
+     大きな rx を持つスタジアム形を潰したりする副作用があるため）。 */
 #mermaid-container g.node rect,
 #mermaid-container g.node polygon,
 #mermaid-container g.node circle,
@@ -295,25 +297,22 @@ path.flowchart-link.fc-selected {
 #mermaid-container g.node path {
   stroke-width: 2.5px;
 }
-/* 角丸矩形の角を強調し、矩形との違いを明確にする */
-#mermaid-container g.node rect[rx] {
-  rx: 12px;
-  ry: 12px;
-}
 
 /* ── エッジ線種の差をはっきりさせる ── */
+/* id を付けない 2 クラスのセレクタにし、選択ハイライト
+   （path.flowchart-link.fc-selected = より高い詳細度）を妨げないようにする。 */
 /* 通常／太線の太さ差を拡大する */
-#mermaid-container .flowchart-link.edge-thickness-normal {
+.flowchart-link.edge-thickness-normal {
   stroke-width: 2px !important;
 }
-#mermaid-container .flowchart-link.edge-thickness-thick {
+.flowchart-link.edge-thickness-thick {
   stroke-width: 5px !important;
 }
 /* 点線・破線のパターンを濃く・大きくして実線との違いを明確にする */
-#mermaid-container .flowchart-link.edge-pattern-dotted {
+.flowchart-link.edge-pattern-dotted {
   stroke-dasharray: 2 5 !important;
   stroke-linecap: round;
 }
-#mermaid-container .flowchart-link.edge-pattern-dashed {
+.flowchart-link.edge-pattern-dashed {
   stroke-dasharray: 12 6 !important;
 }
