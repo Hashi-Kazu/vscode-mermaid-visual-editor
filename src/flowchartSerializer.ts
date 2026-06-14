@@ -1,6 +1,41 @@
 /** Apply targeted string-level operations to raw flowchart code. */
 
-import { NodeShape } from './types';
+import { EdgeStyle, NodeShape } from './types';
+
+// Matches any supported edge connector; -.-> must precede -.- to avoid partial match
+const CONNECTOR_RE = /(-\.->|==>|---|-->|-\.-)/;
+
+function styleToConnector(style: EdgeStyle): string {
+  switch (style) {
+    case 'dotted-arrow':    return '-.->';
+    case 'thick-arrow':     return '==>';
+    case 'solid-no-arrow':  return '---';
+    case 'dotted-no-arrow': return '-.-';
+    default:                return '-->';
+  }
+}
+
+export function changeEdgeStyle(
+  code: string,
+  from: string,
+  to: string,
+  idx: number,
+  style: EdgeStyle
+): string {
+  const lines = code.split('\n');
+  let count = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (!isEdgeLine(t)) continue;
+    if (!lineConnects(t, from, to)) continue;
+    if (count === idx) {
+      lines[i] = lines[i].replace(CONNECTOR_RE, styleToConnector(style));
+      break;
+    }
+    count++;
+  }
+  return lines.join('\n');
+}
 
 function esc(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -100,16 +135,16 @@ export function editEdgeLabel(
     if (!lineConnects(t, from, to)) continue;
     if (count === idx) {
       if (newLabel === '') {
-        // Remove label from arrow
+        // Remove label: strip pipe label for any connector, or inline text for -- label -->
         lines[i] = lines[i]
-          .replace(/\s*-->\|[^|]*\|/, ' -->')
-          .replace(/\s*--\s+\S.*?-->/,  ' -->');
+          .replace(/(-\.->|==>|---|-->|-\.-)\|[^|]*\|/, '$1')
+          .replace(/\s*--\s+\S.*?-->/, ' -->');
       } else {
-        // Set or update label
-        if (lines[i].includes('-->|')) {
-          lines[i] = lines[i].replace(/-->\|[^|]*\|/, `-->|${newLabel}|`);
+        // Set or update label using pipe syntax for all connector types
+        if (CONNECTOR_RE.test(lines[i]) && lines[i].includes('|')) {
+          lines[i] = lines[i].replace(/(-\.->|==>|---|-->|-\.-)\|[^|]*\|/, `$1|${newLabel}|`);
         } else {
-          lines[i] = lines[i].replace(/-->/, `-->|${newLabel}|`);
+          lines[i] = lines[i].replace(CONNECTOR_RE, `$1|${newLabel}|`);
         }
       }
       break;
@@ -167,7 +202,7 @@ function genNodeId(code: string): string {
 }
 
 function isEdgeLine(t: string): boolean {
-  return /-->|---|-->>|-\.->|==>/.test(t);
+  return /-->|---|-->>|-\.->|==>|-\.-/.test(t);
 }
 
 function lineReferencesNode(t: string, nodeId: string): boolean {
