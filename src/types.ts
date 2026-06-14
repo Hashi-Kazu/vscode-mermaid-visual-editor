@@ -98,4 +98,5 @@ export type FlowWebToExt =
   | { type: 'changeDirection'; direction: string }
   | { type: 'undo'; code: string }
   | { type: 'save' }
-  | { type: 'switchType'; diagramType: 'gantt' | 'flowchart' };
+  | { type: 'switchType'; diagramType: 'gantt' | 'flowchart' }
+  | { type: 'export'; format: 'svg' | 'png'; data: string };
