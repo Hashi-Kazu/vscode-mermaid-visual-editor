@@ -211,6 +211,13 @@
         selectEdge(entry);
       });
 
+      // エッジ線のダブルクリックでもラベル編集を起動する。
+      // ラベルの無いエッジは .edgeLabel が潰れて掴めないため、こちらが確実な導線になる。
+      edgeEl.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
+        startEdgeLabelEdit(entry);
+      });
+
       edgeEl.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -223,10 +230,6 @@
     // 書式が不安定なため id に依存せず、edgePath と edgeLabel の DOM 順序（index）が
     // 対応することを利用して from/to を解決する。
     const labelEls = Array.from(svgEl.querySelectorAll('.edgeLabel'));
-    // LS-* クラスを持つ edgePath だけを対象にする（補助パスを除外）
-    const labeledPaths = edgeRegistry.map(e => e.el).filter(el =>
-      Array.from(el.classList).some(c => c.startsWith('LS-'))
-    );
 
     labelEls.forEach((labelEl, idx) => {
       // DOM 順序で対応する edgeRegistry エントリを引く
@@ -237,8 +240,7 @@
       labelEl.style.cursor = 'pointer';
       labelEl.addEventListener('dblclick', (e) => {
         e.stopPropagation();
-        const currentLabel = getLabelText(labelEl);
-        startEdgeLabelEdit(labelEl, currentLabel, edgeInfo);
+        startEdgeLabelEdit(edgeInfo);
       });
       labelEl.addEventListener('contextmenu', (e) => {
         e.preventDefault();
@@ -312,11 +314,15 @@
 
     hidePorts(nodeId);
     const ports = [];
+    // 図形の各辺の中点をそのままポート中心に使う
+    // （CSS の translate(-50%,-50%) でドットが中心に揃う）
+    const cx = bbox.left + bbox.width / 2;
+    const cy = bbox.top + bbox.height / 2;
     const positions = [
-      { x: bbox.left + bbox.width / 2, y: bbox.top - 2,               label: 'top' },
-      { x: bbox.left + bbox.width / 2, y: bbox.bottom - 8,            label: 'bottom' },
-      { x: bbox.left - 2,              y: bbox.top + bbox.height / 2,  label: 'left' },
-      { x: bbox.right - 8,             y: bbox.top + bbox.height / 2,  label: 'right' },
+      { x: cx,          y: bbox.top,    label: 'top' },
+      { x: cx,          y: bbox.bottom, label: 'bottom' },
+      { x: bbox.left,   y: cy,          label: 'left' },
+      { x: bbox.right,  y: cy,          label: 'right' },
     ];
 
     positions.forEach(pos => {
@@ -337,8 +343,8 @@
         e.preventDefault();
         e.stopPropagation();
         cancelHidePorts();
-        // ポート div は 10×10px なので中心から線を引く
-        startPortDrag(nodeId, pos.x + 5, pos.y + 5);
+        // pos はポート（＝図形端点）の中心座標
+        startPortDrag(nodeId, pos.x, pos.y);
       });
     });
     portElements.set(nodeId, ports);
@@ -436,10 +442,25 @@
     return '';
   }
 
-  function startEdgeLabelEdit(labelEl, currentLabel, edgeInfo) {
-    const bbox = labelEl.getBoundingClientRect();
+  function startEdgeLabelEdit(edgeInfo) {
+    const labelEl = edgeInfo.labelEl;
+    const currentLabel = labelEl ? getLabelText(labelEl) : '';
+
+    // ラベル位置を基準にするが、ラベルが無い／潰れている場合は
+    // エッジ線の中央を基準にしてエディタが画面外へ出ないようにする。
+    let box = labelEl ? labelEl.getBoundingClientRect() : null;
+    if (!box || box.width < 4 || box.height < 4) {
+      const pb = edgeInfo.el.getBoundingClientRect();
+      box = {
+        left: pb.left + pb.width / 2 - 8,
+        top:  pb.top  + pb.height / 2 - 8,
+        width: 16,
+        height: 16,
+      };
+    }
+
     editState = { kind: 'edge', edgeInfo };
-    showEditInput(bbox, currentLabel);
+    showEditInput(box, currentLabel);
   }
 
   function showEditInput(bbox, value) {
@@ -551,14 +572,7 @@
       menu.appendChild(item);
     };
 
-    addItem('✎ ラベルを編集', () => {
-      const labelEl = edgeInfo.labelEl;
-      const currentLabel = labelEl ? getLabelText(labelEl) : '';
-      const refEl = labelEl || edgeInfo.el;
-      const bbox = refEl.getBoundingClientRect();
-      editState = { kind: 'edge', edgeInfo };
-      showEditInput(bbox, currentLabel);
-    });
+    addItem('✎ ラベルを編集', () => startEdgeLabelEdit(edgeInfo));
 
     // スタイル変更サブメニュー
     const styleItem = document.createElement('div');
@@ -728,19 +742,20 @@
     }
     if (svgW <= 0 || svgH <= 0) return;
 
-    const containerPad = 48; // 24px each side from #mermaid-container
-    const canvasW = svgW + containerPad;
-    const canvasH = svgH + containerPad;
-    const margin = 32;
+    const halfPad = 24; // #mermaid-container の片側パディング
+    const margin = 24;  // ビュー端の余白（片側）
 
-    // 全ノード・エッジが収まる範囲で可能な限り拡大する（最大拡大）
+    // 全ノード・エッジが収まる範囲で可能な限り拡大する（最大拡大）。
+    // コンテナのパディングは余白として扱い、SVG 本体がビューを極力埋めるようにする。
     const fitScale = Math.min(
-      (wrap.width  - margin) / canvasW,
-      (wrap.height - margin) / canvasH
+      (wrap.width  - margin * 2) / svgW,
+      (wrap.height - margin * 2) / svgH
     );
     scale = Math.max(MIN_SCALE, Math.min(fitScale, MAX_SCALE));
-    tx = (wrap.width  - canvasW * scale) / 2;
-    ty = (wrap.height - canvasH * scale) / 2;
+
+    // SVG 本体（図形領域）の中心をビュー中央へ合わせてセンタリングする
+    tx = wrap.width  / 2 - scale * (halfPad + svgW / 2);
+    ty = wrap.height / 2 - scale * (halfPad + svgH / 2);
     setTransform();
   }
 

@@ -113,6 +113,9 @@ body {
   position: absolute;
   width: 10px;
   height: 10px;
+  /* left/top に指定した座標がドットの中心になるようにする
+     （図形の端点とポートのズレを防ぐ） */
+  transform: translate(-50%, -50%);
   border-radius: 50%;
   background: var(--vscode-focusBorder);
   border: 2px solid var(--vscode-editor-background);
