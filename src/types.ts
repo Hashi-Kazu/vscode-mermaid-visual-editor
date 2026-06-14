@@ -80,7 +80,8 @@ export interface FlowchartEdge {
 export type FlowExtToWeb =
   | { type: 'update'; rawCode: string; isDark: boolean }
   | { type: 'saved' }
-  | { type: 'empty' };
+  | { type: 'empty' }
+  | { type: 'parseError'; message: string };
 
 // Webview → Extension (Flowchart)
 export type FlowWebToExt =
