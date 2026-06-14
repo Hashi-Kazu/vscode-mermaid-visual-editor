@@ -582,12 +582,6 @@
   document.addEventListener('mousedown', (e) => {
     if (currentMenu && !currentMenu.contains(e.target)) closeContextMenu();
   });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      closeContextMenu();
-      clearSelection();
-    }
-  });
 
   // ── Pan / Zoom ────────────────────────────────────────────────────────────
   function setTransform() {
@@ -730,7 +724,14 @@
     if (undoStack.length > 50) undoStack.shift();
   }
 
+  // ── Keyboard shortcuts ────────────────────────────────────────────────────
   document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeContextMenu();
+      cancelEdit();
+      clearSelection();
+      return;
+    }
     if (editOverlay.classList.contains('visible')) return;
     if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
       e.preventDefault();
