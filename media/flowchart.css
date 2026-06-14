@@ -82,7 +82,19 @@ body {
   position: absolute;
   top: 0; left: 0;
   transform-origin: 0 0;
-  will-change: transform;
+  /* will-change: transform は #canvas を合成レイヤーへ昇格させ、
+     拡大時にビットマップ拡大（＝文字のぼやけ）を招くため指定しない。
+     ベクター SVG / foreignObject はズーム毎に再ラスタライズされ常にくっきり表示される。 */
+}
+
+/* エッジ／ノードラベルの文字を高精細に描画する */
+#mermaid-container svg text,
+#mermaid-container .edgeLabel,
+#mermaid-container .nodeLabel,
+#mermaid-container foreignObject div,
+#mermaid-container foreignObject span {
+  text-rendering: geometricPrecision;
+  -webkit-font-smoothing: antialiased;
 }
 
 #mermaid-container {
@@ -272,3 +284,36 @@ path.flowchart-link.fc-selected {
   color: var(--vscode-button-foreground);
 }
 #btn-init-flowchart:hover { background: var(--vscode-button-hoverBackground); }
+
+/* ── ノード形状の差をはっきりさせる ── */
+/* 各シェイプ（矩形・角丸・ひし形・スタジアム・円）の輪郭を太く描き、
+   形の違いを視覚的に判別しやすくする。 */
+#mermaid-container g.node rect,
+#mermaid-container g.node polygon,
+#mermaid-container g.node circle,
+#mermaid-container g.node ellipse,
+#mermaid-container g.node path {
+  stroke-width: 2.5px;
+}
+/* 角丸矩形の角を強調し、矩形との違いを明確にする */
+#mermaid-container g.node rect[rx] {
+  rx: 12px;
+  ry: 12px;
+}
+
+/* ── エッジ線種の差をはっきりさせる ── */
+/* 通常／太線の太さ差を拡大する */
+#mermaid-container .flowchart-link.edge-thickness-normal {
+  stroke-width: 2px !important;
+}
+#mermaid-container .flowchart-link.edge-thickness-thick {
+  stroke-width: 5px !important;
+}
+/* 点線・破線のパターンを濃く・大きくして実線との違いを明確にする */
+#mermaid-container .flowchart-link.edge-pattern-dotted {
+  stroke-dasharray: 2 5 !important;
+  stroke-linecap: round;
+}
+#mermaid-container .flowchart-link.edge-pattern-dashed {
+  stroke-dasharray: 12 6 !important;
+}

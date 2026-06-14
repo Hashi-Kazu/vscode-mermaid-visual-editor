@@ -15,6 +15,8 @@
   let selectedEdge = null; // { el, from, to, idx }
 
   // Pan/zoom state
+  const MIN_SCALE = 0.1;
+  const MAX_SCALE = 8; // 拡大上限（従来 4 から引き上げ）
   let tx = 0, ty = 0, scale = 1;
   let isPanning = false;
   let panStartX = 0, panStartY = 0, panStartTx = 0, panStartTy = 0;
@@ -668,7 +670,7 @@
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
     const factor = e.deltaY < 0 ? 1.1 : 0.9;
-    const newScale = Math.max(0.1, Math.min(4, scale * factor));
+    const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale * factor));
     tx = mx - (mx - tx) * (newScale / scale);
     ty = my - (my - ty) * (newScale / scale);
     scale = newScale;
@@ -727,12 +729,12 @@
     const canvasH = svgH + containerPad;
     const margin = 32;
 
-    const newScale = Math.min(
+    // 全ノード・エッジが収まる範囲で可能な限り拡大する（最大拡大）
+    const fitScale = Math.min(
       (wrap.width  - margin) / canvasW,
-      (wrap.height - margin) / canvasH,
-      2
+      (wrap.height - margin) / canvasH
     );
-    scale = Math.max(0.1, newScale);
+    scale = Math.max(MIN_SCALE, Math.min(fitScale, MAX_SCALE));
     tx = (wrap.width  - canvasW * scale) / 2;
     ty = (wrap.height - canvasH * scale) / 2;
     setTransform();
