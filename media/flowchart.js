@@ -246,9 +246,9 @@
     // Try data-id attribute first (Mermaid 10+)
     const dataId = el.getAttribute('data-id');
     if (dataId) return dataId;
-    // Fallback: parse from id="flowchart-NodeId-N"
+    // Fallback: parse from id like "flowchart-NodeId-N" or "fc-render-1-flowchart-NodeId-N"
     const id = el.id || '';
-    const m = id.match(/^flowchart-(.+)-\d+$/);
+    const m = id.match(/(?:^|-)flowchart-(.+?)-\d+$/);
     if (m) return m[1];
     return null;
   }

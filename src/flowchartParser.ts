@@ -1,4 +1,4 @@
-import { FlowchartData, FlowchartNode, FlowchartEdge, EdgeStyle } from './types';
+import { FlowchartData, FlowchartNode, FlowchartEdge, EdgeStyle, NodeShape } from './types';
 
 export function parseFlowchart(text: string): FlowchartData | null {
   let code = text.trim();
@@ -31,7 +31,7 @@ function parseCode(code: string): FlowchartData | null {
   }
   if (!foundHeader) return null;
 
-  const nodeMap = new Map<string, string>(); // id -> label
+  const nodeMap = new Map<string, { label: string; shape: NodeShape }>(); // id -> {label, shape}
   const edges: FlowchartEdge[] = [];
   const edgeCounts = new Map<string, number>();
   let pastHeader = false;
@@ -48,7 +48,7 @@ function parseCode(code: string): FlowchartData | null {
     parseLine(t, nodeMap, edges, edgeCounts);
   }
 
-  const nodes: FlowchartNode[] = [...nodeMap.entries()].map(([id, label]) => ({ id, label }));
+  const nodes: FlowchartNode[] = [...nodeMap.entries()].map(([id, v]) => ({ id, label: v.label, shape: v.shape }));
   return { direction, keyword, nodes, edges };
 }
 
@@ -62,7 +62,7 @@ function connectorToStyle(connector: string): EdgeStyle {
 
 function parseLine(
   line: string,
-  nodeMap: Map<string, string>,
+  nodeMap: Map<string, { label: string; shape: NodeShape }>,
   edges: FlowchartEdge[],
   edgeCounts: Map<string, number>
 ): void {
@@ -81,7 +81,7 @@ function parseLine(
 
   // Standalone node definition
   const node = extractNode(line.trim());
-  if (node && !nodeMap.has(node.id)) nodeMap.set(node.id, node.label);
+  if (node && !nodeMap.has(node.id)) nodeMap.set(node.id, { label: node.label, shape: node.shape });
 }
 
 function addEdge(
@@ -89,15 +89,15 @@ function addEdge(
   toToken: string,
   label: string | undefined,
   connector: string,
-  nodeMap: Map<string, string>,
+  nodeMap: Map<string, { label: string; shape: NodeShape }>,
   edges: FlowchartEdge[],
   edgeCounts: Map<string, number>
 ): void {
   const from = extractNode(fromToken.trim());
   const to = extractNode(toToken.trim());
   if (!from || !to) return;
-  if (!nodeMap.has(from.id)) nodeMap.set(from.id, from.label);
-  if (!nodeMap.has(to.id)) nodeMap.set(to.id, to.label);
+  if (!nodeMap.has(from.id)) nodeMap.set(from.id, { label: from.label, shape: from.shape });
+  if (!nodeMap.has(to.id)) nodeMap.set(to.id, { label: to.label, shape: to.shape });
 
   const key = `${from.id}::${to.id}`;
   const idx = edgeCounts.get(key) ?? 0;
@@ -105,14 +105,19 @@ function addEdge(
   edges.push({ id: `${from.id}::${to.id}::${idx}`, from: from.id, to: to.id, label, style: connectorToStyle(connector) });
 }
 
-function extractNode(token: string): { id: string; label: string } | null {
+function extractNode(token: string): { id: string; label: string; shape: NodeShape } | null {
   const m = token.match(
     /^([A-Za-z0-9_][A-Za-z0-9_-]*)(?:\[([^\]]*)\]|\{([^}]*)\}|\(\[([^\]]*)\]\)|\(\(([^)]*)\)\)|\(([^)]*)\))?$/
   );
   if (!m || !m[1]) return null;
   const id = m[1];
   const label = m[2] ?? m[3] ?? m[4] ?? m[5] ?? m[6] ?? id;
-  return { id, label };
+  let shape: NodeShape = 'rect';
+  if (m[3] !== undefined) shape = 'diamond';
+  else if (m[4] !== undefined) shape = 'stadium';
+  else if (m[5] !== undefined) shape = 'circle';
+  else if (m[6] !== undefined) shape = 'round';
+  return { id, label, shape };
 }
 
 export function getFlowchartBlock(text: string): { start: number; end: number } | null {

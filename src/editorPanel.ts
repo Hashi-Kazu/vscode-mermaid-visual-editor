@@ -4,7 +4,8 @@ import { ganttToCode, applyToDocument as ganttApply } from './ganttSerializer';
 import { parseFlowchart } from './flowchartParser';
 import {
   setDirection, editNodeLabel, addNode, deleteNode,
-  addEdge, editEdgeLabel, deleteEdge, applyToDocument as flowApply,
+  addEdge, editEdgeLabel, deleteEdge, changeEdgeStyle, changeNodeShape,
+  applyToDocument as flowApply,
 } from './flowchartSerializer';
 import { GanttData, GanttTask, WebToExt, FlowWebToExt } from './types';
 
@@ -259,15 +260,18 @@ export class EditorPanel {
 
   private async _handleFlowchart(msg: FlowWebToExt): Promise<void> {
     switch (msg.type) {
-      case 'initFlowchart': await this._initFlowchart(); break;
-      case 'editNode':   await this._flowOp(c => editNodeLabel(c, msg.nodeId, msg.label)); break;
-      case 'addNode':    await this._addFlowNode(); break;
-      case 'deleteNode': await this._flowOp(c => deleteNode(c, msg.nodeId)); break;
-      case 'addEdge':    await this._flowOp(c => addEdge(c, msg.from, msg.to)); break;
-      case 'editEdge':   await this._flowOp(c => editEdgeLabel(c, msg.from, msg.to, msg.idx, msg.label)); break;
-      case 'deleteEdge': await this._flowOp(c => deleteEdge(c, msg.from, msg.to, msg.idx)); break;
-      case 'setDirection': await this._flowOp(c => setDirection(c, msg.direction)); break;
-      case 'undo':       await this._applyFlowRaw(msg.code); break;
+      case 'initFlowchart':    await this._initFlowchart(); break;
+      case 'editNode':         await this._flowOp(c => editNodeLabel(c, msg.nodeId, msg.label)); break;
+      case 'addNode':          await this._addFlowNode(); break;
+      case 'deleteNode':       await this._flowOp(c => deleteNode(c, msg.nodeId)); break;
+      case 'changeNodeShape':  await this._flowOp(c => changeNodeShape(c, msg.nodeId, msg.shape)); break;
+      case 'addEdge':          await this._flowOp(c => addEdge(c, msg.from, msg.to)); break;
+      case 'editEdge':         await this._flowOp(c => editEdgeLabel(c, msg.from, msg.to, msg.idx, msg.label)); break;
+      case 'deleteEdge':       await this._flowOp(c => deleteEdge(c, msg.from, msg.to, msg.idx)); break;
+      case 'changeEdgeStyle':  await this._flowOp(c => changeEdgeStyle(c, msg.from, msg.to, msg.idx, msg.style)); break;
+      case 'changeDirection':  await this._flowOp(c => setDirection(c, msg.direction)); break;
+      case 'undo':             await this._applyFlowRaw(msg.code); break;
+      case 'export':           await this._handleExport(msg.format, msg.data); break;
       case 'save':
         await this._document.save();
         this._panel.webview.postMessage({ type: 'saved' });
@@ -315,6 +319,17 @@ export class EditorPanel {
     const text = this._document.getText();
     const newDoc = flowApply(text, this._document.fileName, newRaw);
     this._enqueueWrite(newDoc);
+  }
+
+  private async _handleExport(format: 'svg' | 'png', data: string): Promise<void> {
+    const baseName = this._document.uri.fsPath.replace(/\.[^.]+$/, '');
+    const defaultUri = vscode.Uri.file(`${baseName}.${format}`);
+    const filters = format === 'svg' ? { 'SVG Image': ['svg'] } : { 'PNG Image': ['png'] };
+    const uri = await vscode.window.showSaveDialog({ defaultUri, filters });
+    if (!uri) return;
+    const bytes = format === 'svg' ? Buffer.from(data, 'utf-8') : Buffer.from(data, 'base64');
+    await vscode.workspace.fs.writeFile(uri, bytes);
+    vscode.window.showInformationMessage(`エクスポートしました: ${uri.fsPath}`);
   }
 
   private async _initFlowchart(): Promise<void> {
@@ -519,6 +534,7 @@ export class EditorPanel {
     <button id="btn-add-node">＋ ノード追加</button>
     <button id="btn-undo">↩ 元に戻す</button>
     <button id="btn-fit">⊡ 全体表示</button>
+    <button id="btn-export">⬇ エクスポート</button>
     <span class="toolbar-sep"></span>
     <label class="toolbar-label" for="sel-direction">方向</label>
     <select id="sel-direction" disabled>

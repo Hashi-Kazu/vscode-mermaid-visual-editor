@@ -1,7 +1,7 @@
 # Markdown マーメイドエディタ VS Code拡張機能 要求仕様書
 
 **文書番号**: MMD-REQ-001  
-**バージョン**: 1.6  
+**バージョン**: 2.0  
 **作成日**: 2026-06-11  
 **最終更新**: 2026-06-14  
 **ステータス**: 草稿
@@ -19,7 +19,8 @@
 |---------|------|
 | **フェーズ1（実装済）** | ガントチャートの双方向編集・ビューア操作（US-G01〜US-G14） |
 | **フェーズ2（実装済 v1.5）** | フローチャートの双方向編集・ビューア操作（US-F01〜US-F07）・GanttとFlowchartを単一パネルで切替 |
-| フェーズ3以降（後続） | ダイアグラム横断共通機能（US-C01〜US-C08）・フローチャートシェイプ変更・エッジタイプ変更・サブグラフ管理・他ダイアグラム型ビューア |
+| **フェーズ3（実装済 v2.0）** | フローチャートのノードシェイプ変更（US-F08）・エッジタイプ変更（US-F09）・SVG/PNGエクスポート（US-C06）・ダイアグラム種別セレクタ |
+| フェーズ4以降（後続） | その他のダイアグラム横断共通機能（US-C01〜US-C05・US-C07・US-C08）・サブグラフ管理・他ダイアグラム型ビューア |
 
 ### ID 命名規則
 
@@ -28,6 +29,8 @@
 | プレフィックス | 対象 | 例 |
 |--------------|------|----|
 | `US-C**` | ダイアグラム横断の共通ユーザーストーリー | US-C01 |
+| `R-C**`  | ダイアグラム横断の共通要件 | R-C06-01 |
+| `AT-C**` | ダイアグラム横断の共通受入テスト | AT-C01 |
 | `US-G**` | ガントチャート固有のユーザーストーリー | US-G01 |
 | `R-G**`  | ガントチャート固有の要件 | R-G01-01 |
 | `US-F**` | フローチャート固有のユーザーストーリー | US-F01 |
@@ -71,9 +74,20 @@
 | US-C03 | シンタックスハイライト | Markdown内Mermaidブロックのキーワード色分け |
 | US-C04 | スニペット・オートコンプリート | ダイアグラムタイプ宣言テンプレート補完 |
 | US-C05 | ~~プレビューのパン・ズーム~~ | フェーズ1（US-G10）に昇格済み |
-| US-C06 | SVG / PNG エクスポート | レンダリング結果の画像出力 |
-| US-C07 | ダイアグラムタイプ自動判別 | 先頭行からタイプを識別しレンダラーを選択 |
+| US-C06 | SVG / PNG エクスポート（**実装済 v2.0**・§4.1で詳細化） | レンダリング結果の画像出力 |
+| US-C07 | ダイアグラムタイプ自動判別（**実装済**） | 先頭行からタイプを識別しレンダラーを選択（`mermaid.openEditor`） |
 | US-C08 | Markdown連携 | カーソル位置のMermaidブロックをプレビュー |
+
+### 4.1 US-C06 SVG / PNG エクスポート（実装済 v2.0）
+
+**ユーザーストーリー**  
+ユーザーは、ビューアでレンダリングした図を画像ファイルとして書き出したい。なぜなら、ドキュメントや資料に図を貼り付けたいから。
+
+| ID | 要件 | 優先度 | 受入条件 |
+|----|------|--------|---------|
+| R-C06-01 | フローチャートパネルから現在のレンダリング結果をSVG / PNGでエクスポートできる | 必須 | ツールバー「⬇ エクスポート」または右クリックメニューから「SVGとして保存」「PNGとして保存」を選択できること |
+| R-C06-02 | エクスポート時はVS Codeの保存ダイアログを表示し、保存先・ファイル名を指定できる | 必須 | デフォルトファイル名は元ファイル名の拡張子を置換したもの（例: `project.svg` / `project.png`）とすること |
+| R-C06-03 | SVGはMermaid.jsが生成したSVG文字列を、PNGはCanvas経由でラスタライズしたバイナリを書き出す | 必須 | 保存後に書き出したパスを通知メッセージで表示すること |
 
 ---
 ## 5. ガントチャート機能要件
@@ -400,6 +414,36 @@
 | R-F07-04 | ツールバーの「全体表示」ボタンで全ノードが画面に収まるよう自動調整する | 必須 | 全ノードが収まる倍率・スクロール位置に自動調整されること（参照: R-F01-08 初回起動時の自動フィット） |
 
 ---
+### 6.9 US-F08 ノードシェイプ変更（実装済 v2.0）
+
+**ユーザーストーリー**  
+ユーザーは、ノードの形状（矩形・角丸・ひし形・スタジアム・円）を変更したい。なぜなら、処理／判断／開始終了などの意味を形で区別したいから。
+
+| ID | 要件 | 優先度 | 受入条件 |
+|----|------|--------|---------|
+| R-F08-01 | ノードの右クリックメニューからシェイプを変更できる（矩形 `[]` / 角丸 `()` / ひし形 `{}` / スタジアム `([])` / 円 `(())`） | 必須 | 選択時にMermaidコードの当該ノードの囲み記号が変更され、ラベルは保持されること |
+| R-F08-02 | シェイプ変更はラベルを保持したまま囲み記号のみを置換する | 必須 | 変更後にパネルが再描画され、新しい形状で表示されること |
+| R-F08-03 | シェイプ変更操作はUndoスタックに積まれ `Ctrl+Z` で取り消せる | 必須 | 1回のUndoで変更前のシェイプに戻ること |
+
+---
+### 6.10 US-F09 エッジタイプ変更（実装済 v2.0）
+
+**ユーザーストーリー**  
+ユーザーは、エッジの線種・矢印有無を変更したい。なぜなら、関係性の強弱や種類を線種で表現したいから。
+
+| ID | 要件 | 優先度 | 受入条件 |
+|----|------|--------|---------|
+| R-F09-01 | エッジの右クリックメニューからエッジタイプを変更できる（実線矢印 `-->` / 点線矢印 `-.->`  / 太線矢印 `==>` / 実線 `---` / 点線 `-.-`） | 必須 | 選択時にMermaidコードの当該エッジのコネクタ記号が変更されること。ラベルは保持されること |
+| R-F09-02 | エッジタイプ変更操作はUndoスタックに積まれ `Ctrl+Z` で取り消せる | 必須 | 1回のUndoで変更前のエッジタイプに戻ること |
+
+---
+### 6.11 ダイアグラム種別セレクタ（実装済 v2.0）
+
+| ID | 要件 | 優先度 | 受入条件 |
+|----|------|--------|---------|
+| R-F10-01 | ダイアグラム型を自動判別できないファイルでパネルを開いた場合、Gantt／フローチャートの選択画面を表示する | 必須 | いずれかを選択するとそのビューアに切り替わり、空ファイル用の挿入ボタンが表示されること |
+
+---
 ## 7. 非機能要件
 
 ### 7.1 共通
@@ -461,30 +505,48 @@
 |------|--------|-----------|------|
 | 拡張機能 → Webview | `update` | `{ gantt: GanttData }` | パース済みデータで全体更新 |
 | 拡張機能 → Webview | `saved` | `{}` | ファイル保存完了通知 |
+| 拡張機能 → Webview | `empty` | `{}` | gantブロック未検出（挿入ボタン表示） |
 | Webview → 拡張機能 | `ready` | `{}` | Webview初期化完了通知 |
-| Webview → 拡張機能 | `editTask` | `{ sectionIdx, taskIdx, patch: Partial<GanttTask> }` | タスク変更（移動・リサイズ・名称変更） |
-| Webview → 拡張機能 | `addTask` | `{ sectionIdx, afterTaskIdx, task: GanttTask }` | タスク追加 |
-| Webview → 拡張機能 | `deleteTask` | `{ sectionIdx, taskIdx }` | タスク削除 |
-| Webview → 拡張機能 | `editSection` | `{ sectionIdx, name: string }` | セクション名変更 |
+| Webview → 拡張機能 | `initGantt` | `{}` | 空ファイルへデフォルトテンプレート挿入 |
+| Webview → 拡張機能 | `editTask` | `{ si, ti, patch: Partial<GanttTask> }` | タスク変更（移動・リサイズ・名称変更・状態・日程） |
+| Webview → 拡張機能 | `addTask` | `{ si, afterTi, task: GanttTask }` | タスク追加 |
+| Webview → 拡張機能 | `deleteTask` | `{ si, ti }` | タスク削除 |
+| Webview → 拡張機能 | `editSection` | `{ si, name: string }` | セクション名変更 |
 | Webview → 拡張機能 | `addSection` | `{ name: string }` | セクション追加 |
+| Webview → 拡張機能 | `structuralEdit` | `{ gantt: GanttData }` | 構造編集（並び替え・削除・Undo・複製等）をデータ全体で反映 |
+| Webview → 拡張機能 | `switchType` | `{ diagramType: 'gantt' \| 'flowchart' }` | ビューア種別の切替 |
 | Webview → 拡張機能 | `save` | `{}` | ファイル保存要求（Ctrl+S） |
+
+> 注: タスク・セクションのインデックスはペイロード上 `si`（section index）・`ti`（task index）・`afterTi` として送出する。
 
 ### 8.3 フローチャート メッセージプロトコル
 
+フローチャートは「SVGオーバーレイ方式」（§6.1 設計原則）を採用するため、拡張機能はパース済みデータではなく**生のMermaidコード（`rawCode`）**をWebviewに渡し、Webview側がMermaid.jsで描画する。各編集操作は文字列レベルでコードを書き換える。
+
 | 方向 | タイプ | ペイロード | 用途 |
 |------|--------|-----------|------|
-| 拡張機能 → Webview | `update` | `{ flowchart: FlowchartData, rawCode: string }` | パース済みデータ＋生コードで全体更新 |
+| 拡張機能 → Webview | `update` | `{ rawCode: string, isDark: boolean }` | 生コード＋テーマで全体更新 |
 | 拡張機能 → Webview | `saved` | `{}` | ファイル保存完了通知 |
+| 拡張機能 → Webview | `empty` | `{}` | flowchartブロック未検出（挿入ボタン表示） |
+| 拡張機能 → Webview | `parseError` | `{ message: string }` | パースエラー詳細の表示 |
+| 拡張機能 → Webview | `startEditNode` | `{ nodeId }` | ノード追加直後のインライン編集起動 |
 | Webview → 拡張機能 | `ready` | `{}` | Webview初期化完了通知 |
-| Webview → 拡張機能 | `editNode` | `{ nodeId, patch: Partial<FlowchartNode> }` | ノードラベル変更 |
-| Webview → 拡張機能 | `addNode` | `{ node: FlowchartNode }` | ノード追加 |
+| Webview → 拡張機能 | `initFlowchart` | `{}` | 空ファイルへデフォルトテンプレート挿入 |
+| Webview → 拡張機能 | `editNode` | `{ nodeId, label: string }` | ノードラベル変更 |
+| Webview → 拡張機能 | `addNode` | `{ x?, y? }` | ノード追加 |
 | Webview → 拡張機能 | `deleteNode` | `{ nodeId }` | ノード削除（関連エッジも連動） |
-| Webview → 拡張機能 | `addEdge` | `{ edge: FlowchartEdge }` | エッジ追加 |
-| Webview → 拡張機能 | `editEdge` | `{ edgeId, patch: Partial<FlowchartEdge> }` | エッジラベル変更 |
-| Webview → 拡張機能 | `deleteEdge` | `{ edgeId }` | エッジ削除 |
-| Webview → 拡張機能 | `setDirection` | `{ direction: string }` | グラフ方向変更 |
+| Webview → 拡張機能 | `changeNodeShape` | `{ nodeId, shape: NodeShape }` | ノードシェイプ変更（US-F08） |
+| Webview → 拡張機能 | `addEdge` | `{ from, to }` | エッジ追加 |
+| Webview → 拡張機能 | `editEdge` | `{ from, to, idx, label: string }` | エッジラベル変更 |
+| Webview → 拡張機能 | `deleteEdge` | `{ from, to, idx }` | エッジ削除 |
+| Webview → 拡張機能 | `changeEdgeStyle` | `{ from, to, idx, style: EdgeStyle }` | エッジタイプ変更（US-F09） |
+| Webview → 拡張機能 | `changeDirection` | `{ direction: string }` | グラフ方向変更 |
+| Webview → 拡張機能 | `export` | `{ format: 'svg' \| 'png', data: string }` | SVG/PNGエクスポート（US-C06） |
+| Webview → 拡張機能 | `switchType` | `{ diagramType: 'gantt' \| 'flowchart' }` | ビューア種別の切替 |
 | Webview → 拡張機能 | `undo` | `{ code: string }` | Undo: スナップショットコードで上書き |
 | Webview → 拡張機能 | `save` | `{}` | ファイル保存要求（Ctrl+S） |
+
+> 注: エッジは `from` / `to` と、同一ノード対の中での出現順 `idx` で一意に識別する。
 
 ---
 ## 9. データモデル
@@ -507,15 +569,25 @@ interface GanttSection {
 interface GanttTask {
   id: string;                // タスクID（省略時は自動付番）
   label: string;             // 表示ラベル
-  status: 'done' | 'active' | 'crit' | '';
+  status: 'done' | 'active' | 'crit' | 'milestone' | '';
   startDate: string;         // 絶対日付（dateFormat準拠）
   duration: number;          // 日数
+  afterId?: string;          // 依存関係: `after <id>`（US-G11）
 }
 ```
 
 ### 9.2 フローチャート
 
 ```typescript
+type NodeShape = 'rect' | 'round' | 'diamond' | 'stadium' | 'circle';
+
+type EdgeStyle =
+  | 'solid-arrow'      // A --> B
+  | 'dotted-arrow'     // A -.-> B
+  | 'thick-arrow'      // A ==> B
+  | 'solid-no-arrow'   // A --- B
+  | 'dotted-no-arrow'; // A -.- B
+
 interface FlowchartData {
   direction: 'TD' | 'LR' | 'BT' | 'RL';
   keyword: 'flowchart' | 'graph';
@@ -526,13 +598,15 @@ interface FlowchartData {
 interface FlowchartNode {
   id: string;
   label: string;
+  shape: NodeShape;          // US-F08
 }
 
 interface FlowchartEdge {
-  id: string;                // 内部追跡用（自動生成）
+  id: string;                // `${from}::${to}::${idx}` 形式の内部識別子
   from: string;
   to: string;
   label?: string;
+  style?: EdgeStyle;         // US-F09
 }
 ```
 
@@ -541,12 +615,15 @@ interface FlowchartEdge {
 
 ### 10.1 共通ファイル
 
+GanttとFlowchartは単一の`EditorPanel`（`src/editorPanel.ts`）を共有し、ツールバーの切替ボタンで表示を切り替える（R-F01-02）。
+
 ```
 vscode-mermaid-visual-editor/
 ├── .vscode/
 │   └── launch.json
 ├── src/
 │   ├── extension.ts         ← コマンド登録・アクティベーション
+│   ├── editorPanel.ts       ← Gantt/Flowchart共有のWebviewPanel管理
 │   └── types.ts             ← 共通型定義
 ├── media/
 │   └── icon.png
@@ -554,6 +631,9 @@ vscode-mermaid-visual-editor/
 │   └── mermaid.json
 ├── syntaxes/
 │   └── mermaid.tmLanguage.json
+├── test/                    ← パーサ/シリアライザのユニットテスト（node --test）
+│   ├── serializers.test.ts
+│   └── parsers.test.ts
 ├── docs/
 │   └── requirements.md
 ├── dist/
@@ -567,7 +647,6 @@ vscode-mermaid-visual-editor/
 
 ```
 ├── src/
-│   ├── ganttPanel.ts        ← WebviewPanel 管理
 │   ├── ganttParser.ts       ← Mermaidコード → GanttData
 │   └── ganttSerializer.ts   ← GanttData → Mermaidコード
 └── media/
@@ -575,17 +654,20 @@ vscode-mermaid-visual-editor/
     └── gantt.css            ← スタイル
 ```
 
+> ※ WebviewPanel管理は共通の `editorPanel.ts` が担う（旧 `ganttPanel.ts` はv2.0で統合・廃止）。
+
 ### 10.3 フローチャート固有ファイル
 
 ```
 ├── src/
-│   ├── flowchartPanel.ts    ← WebviewPanel 管理
 │   ├── flowchartParser.ts   ← Mermaidコード → FlowchartData
-│   └── flowchartSerializer.ts ← FlowchartData → Mermaidコード
+│   └── flowchartSerializer.ts ← FlowchartData → Mermaidコード（文字列レベルの編集操作）
 └── media/
     ├── flowchart.js         ← Webview側スクリプト（SVGオーバーレイ・操作制御）
     └── flowchart.css        ← スタイル
 ```
+
+> ※ WebviewPanel管理は共通の `editorPanel.ts` が担う（旧 `flowchartPanel.ts` はv2.0で統合・廃止）。
 
 ---
 ## 11. 受入テスト基準
@@ -677,12 +759,24 @@ vscode-mermaid-visual-editor/
 | AT-F21 | パネル起動直後（初回レンダリング）の表示を確認する | 全ノードが画面内に収まるよう自動フィットされること（R-F01-08） |
 | AT-F22 | Ganttエディタを開いた状態でツールバーの「↔ フローチャート」ボタンを押す | 同一パネル内がフローチャートビューに切り替わる。新しいパネルが開かないこと |
 | AT-F23 | フローチャートエディタを開いた状態でツールバーの「↔ Gantt」ボタンを押す | 同一パネル内がGanttビューに切り替わる。新しいパネルが開かないこと |
+| AT-F24 | ノードを右クリック→シェイプ変更でひし形を選択する | コードの当該ノードが `{}` 囲みに変わり、ラベルが保持されパネルが再描画される（US-F08） |
+| AT-F25 | エッジを右クリック→エッジタイプ変更で点線矢印を選択する | コードの当該エッジのコネクタが `-.->` に変わり、ラベルが保持される（US-F09） |
+| AT-F26 | ダイアグラム型を判別できないファイルでパネルを開く | Gantt／フローチャートの選択画面が表示され、選択でそのビューアに切り替わる（R-F10-01） |
+
+---
+### 11.3 共通（ダイアグラム横断）
+
+| テストID | シナリオ | 期待結果 |
+|---------|---------|----------|
+| AT-C01 | フローチャートで右クリック→「SVGとして保存」を選択する | 保存ダイアログが開き、選択先にSVGファイルが書き出される（R-C06-01〜03） |
+| AT-C02 | フローチャートのツールバー「⬇ エクスポート」からPNGを選択する | 保存ダイアログが開き、選択先にPNGファイルが書き出される |
 
 ---
 ## 12. 変更履歴
 
 | バージョン | 日付 | 変更内容 |
 |-----------|------|---------|
+| 2.0 | 2026-06-14 | フェーズ3を実装済に更新。US-C06 SVG/PNGエクスポート（R-C06-01〜03・AT-C01/02）、US-F08 ノードシェイプ変更（R-F08）、US-F09 エッジタイプ変更（R-F09）、R-F10-01 ダイアグラム種別セレクタを追加。実装との乖離を解消: §8.2/8.3 メッセージプロトコル（`si/ti`・`changeDirection`・`changeNodeShape`・`changeEdgeStyle`・`export`・`switchType`・`empty`・`parseError`・`startEditNode`、flowchart `update`は`{rawCode, isDark}`）、§9 データモデル（GanttTaskに`milestone`/`afterId`、FlowchartNodeに`shape`、FlowchartEdgeに`style`、`NodeShape`/`EdgeStyle`型）、§10 ファイル構成（共通`editorPanel.ts`へ統合し旧 `ganttPanel.ts`/`flowchartPanel.ts`/`mermaidPanel.ts` を廃止、`test/`追加）を反映。バグ修正: flowchartパーサに`shape`検出を追加、サンプル`project.md`の破損を修復、CRLF環境でのmermaidフェンス保持。パーサ/シリアライザのユニットテスト（`npm test`）を追加 |
 | 1.6 | 2026-06-14 | R-F01-02: GanttとFlowchartを単一EditorPanelに統合（ツールバー切り替えボタン）。R-F01-08: 初回表示時の自動フィット要件を追加。R-F03-01/02: ノード追加後のビューア再描画を受入条件に明記。AT-F10/AT-F21〜F23: 新規・更新。フェーズ2を実装済に更新 |
 | 1.5 | 2026-06-13 | §6 フローチャート機能要件（US-F01〜US-F07）を新規追加。フェーズ2をフローチャートとして設定。ID命名規則にUS-F/R-F/NF-F/AT-Fを追加。§8.3 フローチャートメッセージプロトコル、§9.2 フローチャートデータモデル、§10.3 フローチャートファイル構成、§11.2 フローチャート受入テスト（AT-F01〜F20）を追加。既存§6〜§11を§7〜§12に繰り上げ |
 | 1.4 | 2026-06-13 | US-G12 ガントヘッダー設定の編集（R-G12-01〜03）。US-G13 タスクの複製（R-G13-01〜03）。US-G14 日付・期間の直接入力（R-G14-01〜05）。AT-G44〜G53 追加。フェーズ1をUS-G01〜G14に拡張 |

@@ -37,13 +37,6 @@ export type WebToExt =
   | { type: 'structuralEdit'; gantt: GanttData }
   | { type: 'save' };
 
-// ── MermaidPanel (preview) types ─────────────────────────────────────────────
-export type ExtensionToWebview =
-  | { type: 'render'; code: string; theme: string };
-
-export type WebviewToExtension =
-  | { type: 'ready' };
-
 // ── Flowchart types ──────────────────────────────────────────────────────────
 
 export type EdgeStyle =

@@ -33,7 +33,7 @@ export function applyToDocument(docText: string, fileName: string, newGanttCode:
 
   // Replace the first ```mermaid block that starts with gantt
   const replaced = docText.replace(
-    /(```mermaid[ \t]*\n)([\s\S]*?)(```)/,
+    /(```mermaid[ \t]*\r?\n)([\s\S]*?)(```)/,
     (_, open, body, close) => {
       if (body.trimStart().startsWith('gantt')) {
         return open + newGanttCode + '\n' + close;
