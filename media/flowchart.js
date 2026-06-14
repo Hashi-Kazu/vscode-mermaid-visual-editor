@@ -176,18 +176,6 @@
         showNodeContextMenu(e, nodeId);
       });
 
-      // Drop target for edge drag
-      nodeEl.addEventListener('mouseup', (e) => {
-        if (!isDraggingPort) return;
-        e.stopPropagation();
-        const toNodeId = nodeId;
-        if (toNodeId && toNodeId !== dragFromNodeId) {
-          pushUndo();
-          send({ type: 'addEdge', from: dragFromNodeId, to: toNodeId });
-        }
-        endPortDrag();
-        nodeEl.classList.remove('fc-node-drop-target');
-      });
       nodeEl.addEventListener('dragover', (e) => e.preventDefault());
     });
 
@@ -373,6 +361,17 @@
 
   document.addEventListener('mouseup', (e) => {
     if (!isDraggingPort) return;
+    // SVG の g.node は mouseup のバブリングが不安定なため、
+    // nodeRegistry の bounding rect とマウス座標で衝突判定してエッジを追加する
+    for (const [nodeId, info] of nodeRegistry) {
+      if (nodeId === dragFromNodeId) continue;
+      const r = info.el.getBoundingClientRect();
+      if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
+        pushUndo();
+        send({ type: 'addEdge', from: dragFromNodeId, to: nodeId });
+        break;
+      }
+    }
     endPortDrag();
     const svgEl = container.querySelector('svg');
     if (svgEl) svgEl.querySelectorAll('.fc-node-drop-target').forEach(el => el.classList.remove('fc-node-drop-target'));
