@@ -66,6 +66,7 @@ export class FlowchartPanel {
           case 'changeDirection': await this._applyOp(c => setDirection(c, msg.direction)); break;
           case 'undo':          await this._applyRaw(msg.code); break;
           case 'save':          await this._document.save(); this._panel.webview.postMessage({ type: 'saved' }); break;
+          case 'export':        await this._handleExport(msg.format, msg.data); break;
         }
       },
       null,
@@ -162,6 +163,21 @@ export class FlowchartPanel {
     }
   }
 
+  private async _handleExport(format: 'svg' | 'png', data: string): Promise<void> {
+    const baseName = this._document.uri.fsPath.replace(/\.[^.]+$/, '');
+    const defaultUri = vscode.Uri.file(`${baseName}.${format}`);
+    const filters = format === 'svg'
+      ? { 'SVG Image': ['svg'] }
+      : { 'PNG Image': ['png'] };
+    const uri = await vscode.window.showSaveDialog({ defaultUri, filters });
+    if (!uri) return;
+    const bytes = format === 'svg'
+      ? Buffer.from(data, 'utf-8')
+      : Buffer.from(data, 'base64');
+    await vscode.workspace.fs.writeFile(uri, bytes);
+    vscode.window.showInformationMessage(`エクスポートしました: ${uri.fsPath}`);
+  }
+
   private async _initFlowchart(): Promise<void> {
     const template =
       '```mermaid\n' +
@@ -204,7 +220,8 @@ export class FlowchartPanel {
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'none';
              script-src 'nonce-${nonce}';
-             style-src ${wv.cspSource} 'unsafe-inline';">
+             style-src ${wv.cspSource} 'unsafe-inline';
+             img-src data:;">
   <link rel="stylesheet" href="${uri('flowchart.css')}">
 </head>
 <body>
@@ -212,6 +229,7 @@ export class FlowchartPanel {
     <button id="btn-add-node">＋ ノード追加</button>
     <button id="btn-undo">↩ 元に戻す</button>
     <button id="btn-fit">⊡ 全体表示</button>
+    <button id="btn-export">⬇ エクスポート</button>
     <span class="toolbar-sep"></span>
     <label class="toolbar-label" for="sel-direction">方向</label>
     <select id="sel-direction">

@@ -38,6 +38,7 @@
   const btnAddNode   = document.getElementById('btn-add-node');
   const btnUndo      = document.getElementById('btn-undo');
   const btnFit       = document.getElementById('btn-fit');
+  const btnExport    = document.getElementById('btn-export');
   const selDirection = document.getElementById('sel-direction');
   const statusLabel  = document.getElementById('status-label');
   const editOverlay  = document.getElementById('fc-edit-overlay');
@@ -785,6 +786,69 @@
 
   btnFit.addEventListener('click', fitView);
 
+  btnExport.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showExportMenu(e);
+  });
+
+  function showExportMenu(e) {
+    closeContextMenu();
+    const menu = document.createElement('div');
+    menu.className = 'fc-menu';
+
+    const addItem = (text, action) => {
+      const item = document.createElement('div');
+      item.className = 'fc-menu-item';
+      item.textContent = text;
+      item.addEventListener('mousedown', (ev) => { ev.preventDefault(); action(); closeContextMenu(); });
+      menu.appendChild(item);
+    };
+
+    addItem('SVGとして保存', () => exportAs('svg'));
+    addItem('PNGとして保存', () => exportAs('png'));
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    placeMenu(menu, rect.left, rect.bottom + 4);
+  }
+
+  function exportAs(format) {
+    const svgEl = container.querySelector('svg');
+    if (!svgEl) return;
+
+    const serializer = new XMLSerializer();
+    const svgStr = serializer.serializeToString(svgEl);
+
+    if (format === 'svg') {
+      send({ type: 'export', format: 'svg', data: svgStr });
+      return;
+    }
+
+    // PNG: render SVG into a canvas via a data URI image
+    const vb = svgEl.viewBox && svgEl.viewBox.baseVal;
+    const w = (vb && vb.width > 0) ? vb.width  : (svgEl.getBoundingClientRect().width  || 800);
+    const h = (vb && vb.height > 0) ? vb.height : (svgEl.getBoundingClientRect().height || 600);
+
+    const svgBase64 = btoa(unescape(encodeURIComponent(svgStr)));
+    const dataUrl = 'data:image/svg+xml;base64,' + svgBase64;
+
+    const img = new Image();
+    img.onload = () => {
+      const px = 2; // 2x resolution for crisp output
+      const cvs = document.createElement('canvas');
+      cvs.width  = w * px;
+      cvs.height = h * px;
+      const ctx = cvs.getContext('2d');
+      ctx.scale(px, px);
+      ctx.fillStyle = isDark ? '#1e1e1e' : '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      const pngBase64 = cvs.toDataURL('image/png').split(',')[1];
+      send({ type: 'export', format: 'png', data: pngBase64 });
+    };
+    img.onerror = () => showStatus('PNGエクスポートに失敗しました');
+    img.src = dataUrl;
+  }
+
   selDirection.addEventListener('change', () => {
     pushUndo();
     send({ type: 'changeDirection', direction: selDirection.value });
@@ -818,6 +882,7 @@
     btnAddNode.disabled   = !enabled;
     btnUndo.disabled      = !enabled;
     btnFit.disabled       = !enabled;
+    btnExport.disabled    = !enabled;
     selDirection.disabled = !enabled;
   }
 
