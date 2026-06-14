@@ -53,5 +53,5 @@ jobs:
            - `dist/` は編集しない（ビルド出力のため）
            - コメントは WHY が非自明な場合のみ書く
          claude_args: |
-           --max-turns 50
+           --max-turns 100
            --dangerously-skip-permissions
