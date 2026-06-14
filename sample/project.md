@@ -1,7 +1,7 @@
 ```mermaid
 flowchart TD
-    A[開始] --> B{条件}
-    B -->|はい| C[処理A]
-    B -->|いいえ| D[終了]
-    C --> D
+    node7[新しいノード]
+    node7[新しいノード]
+    node6[新しいノード]
+    node5[新しいノード]
 ```
