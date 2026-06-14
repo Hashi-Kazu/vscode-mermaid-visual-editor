@@ -1,9 +1,6 @@
-```mermaid
-gantt
-    title プロジェクトスケジュール
-    dateFormat YYYY-MM-DD
-
-    section フェーズ1
-        タスク2 :task2, 2026-05-16, 4d
-        タスク1 :task1, 2026-05-14, 4d
-```
+flowchart TD
+    node2[新しいノード]
+    node1[新しいノード]
+    A[開始] --> B{条件}
+    B -->|はい| C[処理A]
+    B -->|いいえ| D[終了]
