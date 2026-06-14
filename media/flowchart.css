@@ -152,12 +152,13 @@ g.node.fc-selected circle,
 g.node.fc-selected ellipse {
   stroke: var(--vscode-focusBorder) !important;
   stroke-width: 2.5px !important;
-  filter: brightness(1.1);
+  filter: brightness(1.1) drop-shadow(0 0 4px var(--vscode-focusBorder));
 }
 .edgePath.fc-selected path,
 path.flowchart-link.fc-selected {
   stroke: var(--vscode-focusBorder) !important;
   stroke-width: 3px !important;
+  filter: drop-shadow(0 0 3px var(--vscode-focusBorder));
 }
 
 /* ── Inline edit input ── */
