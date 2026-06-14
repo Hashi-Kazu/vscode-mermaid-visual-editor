@@ -1,7 +1,31 @@
 /** Apply targeted string-level operations to raw flowchart code. */
 
+import { NodeShape } from './types';
+
 function esc(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+const SHAPE_WRAP: Record<NodeShape, [string, string]> = {
+  rect:    ['[',  ']'],
+  round:   ['(',  ')'],
+  diamond: ['{',  '}'],
+  stadium: ['([', '])'],
+  circle:  ['((', '))'],
+};
+
+export function changeNodeShape(code: string, nodeId: string, shape: NodeShape): string {
+  const [open, close] = SHAPE_WRAP[shape];
+  const id = esc(nodeId);
+  // Match the existing shape brackets and extract the label inside
+  const re = new RegExp(
+    `(\\b${id})(\\(\\[|\\(\\(|\\[|\\(|\\{)([^\\]\\)\\}]*)(\\]\\)|\\)\\)|\\]|\\)|\\})`,
+    ''
+  );
+  const updated = code.replace(re, (_, nid, _open, label) => `${nid}${open}${label}${close}`);
+  if (updated !== code) return updated;
+  // Node had no shape brackets yet: append a definition
+  return appendAfterHeader(code, `    ${nodeId}${open}${nodeId}${close}`);
 }
 
 export function setDirection(code: string, direction: string): string {

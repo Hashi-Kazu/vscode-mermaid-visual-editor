@@ -3,6 +3,7 @@ import { parseFlowchart } from './flowchartParser';
 import {
   setDirection, editNodeLabel, addNode, deleteNode,
   addEdge, editEdgeLabel, deleteEdge, applyToDocument,
+  changeNodeShape,
 } from './flowchartSerializer';
 import { FlowWebToExt } from './types';
 
@@ -56,8 +57,9 @@ export class FlowchartPanel {
           case 'initFlowchart': await this._initFlowchart(); break;
           case 'editNode':      await this._applyOp(c => editNodeLabel(c, msg.nodeId, msg.label)); break;
           case 'addNode':       await this._applyAddNode(); break;
-          case 'deleteNode':    await this._applyOp(c => deleteNode(c, msg.nodeId)); break;
-          case 'addEdge':       await this._applyOp(c => addEdge(c, msg.from, msg.to)); break;
+          case 'deleteNode':      await this._applyOp(c => deleteNode(c, msg.nodeId)); break;
+          case 'changeNodeShape': await this._applyOp(c => changeNodeShape(c, msg.nodeId, msg.shape)); break;
+          case 'addEdge':         await this._applyOp(c => addEdge(c, msg.from, msg.to)); break;
           case 'editEdge':      await this._applyOp(c => editEdgeLabel(c, msg.from, msg.to, msg.idx, msg.label)); break;
           case 'deleteEdge':    await this._applyOp(c => deleteEdge(c, msg.from, msg.to, msg.idx)); break;
           case 'setDirection':  await this._applyOp(c => setDirection(c, msg.direction)); break;

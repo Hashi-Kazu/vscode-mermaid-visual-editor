@@ -460,6 +460,40 @@
     };
 
     addItem('✎ ラベルを編集', () => startNodeLabelEdit(nodeId));
+
+    // 形状変更サブメニュー
+    const shapeItem = document.createElement('div');
+    shapeItem.className = 'fc-menu-item fc-menu-submenu';
+    shapeItem.textContent = '⬡ 形状を変更';
+    const shapeArrow = document.createElement('span');
+    shapeArrow.className = 'fc-menu-arrow';
+    shapeArrow.textContent = '▶';
+    shapeItem.appendChild(shapeArrow);
+
+    const shapes = [
+      { shape: 'rect',    label: '矩形  [ ]' },
+      { shape: 'round',   label: '角丸矩形  ( )' },
+      { shape: 'diamond', label: '菱形  { }' },
+      { shape: 'stadium', label: 'スタジアム  ([ ])' },
+      { shape: 'circle',  label: '円  (( ))' },
+    ];
+    const subMenu = document.createElement('div');
+    subMenu.className = 'fc-menu fc-submenu';
+    shapes.forEach(({ shape, label }) => {
+      const subItem = document.createElement('div');
+      subItem.className = 'fc-menu-item';
+      subItem.textContent = label;
+      subItem.addEventListener('mousedown', (ev) => {
+        ev.preventDefault();
+        pushUndo();
+        send({ type: 'changeNodeShape', nodeId, shape });
+        closeContextMenu();
+      });
+      subMenu.appendChild(subItem);
+    });
+    shapeItem.appendChild(subMenu);
+    menu.appendChild(shapeItem);
+
     const sep = document.createElement('div'); sep.className = 'fc-menu-sep'; menu.appendChild(sep);
     addItem('✕ ノードを削除', () => { pushUndo(); send({ type: 'deleteNode', nodeId }); });
 
