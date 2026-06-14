@@ -596,6 +596,20 @@
     }
   });
 
+  // ダブルクリックで空白部分にノードを追加する
+  canvasWrap.addEventListener('dblclick', (e) => {
+    if (e.target.closest('g.node, .edgePath, .edgeLabel, .fc-menu, .fc-port, #fc-edit-overlay')) return;
+    if (!rawCode) return;
+    e.preventDefault();
+
+    const rect = canvasWrap.getBoundingClientRect();
+    const x = Math.round((e.clientX - rect.left - tx) / scale);
+    const y = Math.round((e.clientY - rect.top  - ty) / scale);
+
+    pushUndo();
+    send({ type: 'addNode', x, y });
+  });
+
   canvasWrap.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return;
     const target = e.target;
