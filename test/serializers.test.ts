@@ -41,6 +41,25 @@ test('changeNodeShape converts brackets', () => {
   assert.match(changeNodeShape(FC, 'A', 'circle'), /A\(\(開始\)\)/);
 });
 
+test('editNodeLabel extracts inline defs into a single standalone declaration (lazy separation)', () => {
+  const code = 'flowchart TD\n    A[開始] --> B\n    A[開始] --> C';
+  const out = editNodeLabel(code, 'A', '新開始');
+  // インライン定義はすべて剥がされ、エッジは ID 参照のみになる
+  assert.doesNotMatch(out, /A\[開始\]/);
+  assert.match(out, /^\s*A --> B$/m);
+  assert.match(out, /^\s*A --> C$/m);
+  // 新ラベルの単独宣言がちょうど1つだけ存在する
+  const declCount = out.split('\n').filter(l => l.trim() === 'A[新開始]').length;
+  assert.equal(declCount, 1);
+});
+
+test('changeNodeShape separates the node and keeps the edge id-only', () => {
+  const out = changeNodeShape('flowchart TD\n    A[開始] --> B', 'A', 'diamond');
+  assert.match(out, /^\s*A\{開始\}$/m);   // 単独宣言（形状変更・ラベル保持）
+  assert.match(out, /^\s*A --> B$/m);      // エッジは ID 参照のみ
+  assert.doesNotMatch(out, /A\[開始\] -->/);
+});
+
 test('changeEdgeStyle swaps the connector for the indexed edge', () => {
   const out = changeEdgeStyle(FC, 'A', 'B', 0, 'dotted-arrow');
   assert.match(out, /A\[開始\] -\.-> B\{条件\}/);

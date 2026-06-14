@@ -49,18 +49,65 @@ const SHAPE_WRAP: Record<NodeShape, [string, string]> = {
   circle:  ['((', '))'],
 };
 
-export function changeNodeShape(code: string, nodeId: string, shape: NodeShape): string {
-  const [open, close] = SHAPE_WRAP[shape];
+// ── ノード記述の「遅延分離」ポリシー ────────────────────────────────────────
+// エッジは ID 参照のみ、各ノードのラベル／形状は単独の宣言行に1つだけ持たせる。
+// ノードを編集したときだけ、その対象ノードをエッジ内インライン定義から剥がして
+// 単独宣言へ集約する（手付かずの既存行・サブグラフ・コメントは保持する）。
+
+// ノードIDの直後に来るシェイプ囲み（複合形を先に並べて部分一致を防ぐ）
+const SHAPE_BRACKETS =
+  '(\\(\\[[^\\]]*\\]\\)|\\(\\([^)]*\\)\\)|\\[[^\\]]*\\]|\\{[^}]*\\}|\\([^)]*\\))';
+
+function parseWrap(wrap: string): { label: string; shape: NodeShape } {
+  if (wrap.startsWith('([')) return { label: wrap.slice(2, -2), shape: 'stadium' };
+  if (wrap.startsWith('((')) return { label: wrap.slice(2, -2), shape: 'circle' };
+  if (wrap.startsWith('['))  return { label: wrap.slice(1, -1), shape: 'rect' };
+  if (wrap.startsWith('{'))  return { label: wrap.slice(1, -1), shape: 'diamond' };
+  if (wrap.startsWith('('))  return { label: wrap.slice(1, -1), shape: 'round' };
+  return { label: wrap, shape: 'rect' };
+}
+
+/** コード中の最初の定義からノードの現在のラベル・形状を取得する（パーサと同じ優先順位）。 */
+function getNodeDef(code: string, nodeId: string): { label: string; shape: NodeShape } {
   const id = esc(nodeId);
-  // Match the existing shape brackets and extract the label inside
-  const re = new RegExp(
-    `(\\b${id})(\\(\\[|\\(\\(|\\[|\\(|\\{)([^\\]\\)\\}]*)(\\]\\)|\\)\\)|\\]|\\)|\\})`,
-    ''
-  );
-  const updated = code.replace(re, (_, nid, _open, label) => `${nid}${open}${label}${close}`);
-  if (updated !== code) return updated;
-  // Node had no shape brackets yet: append a definition
-  return appendAfterHeader(code, `    ${nodeId}${open}${nodeId}${close}`);
+  const re = new RegExp(`(?:^|[^A-Za-z0-9_-])${id}${SHAPE_BRACKETS}`, 'm');
+  const m = code.match(re);
+  if (m) return parseWrap(m[1]);
+  return { label: nodeId, shape: 'rect' };
+}
+
+/** エッジ行に含まれる nodeId のインライン定義（囲み）を剥がして ID 参照のみにする。 */
+function stripInlineNodeDefs(code: string, nodeId: string): string {
+  const id = esc(nodeId);
+  const re = new RegExp(`(^|[^A-Za-z0-9_-])${id}${SHAPE_BRACKETS}`, 'g');
+  return code.split('\n').map(line => {
+    if (!isEdgeLine(line.trim())) return line;
+    return line.replace(re, (_full, pre) => `${pre}${nodeId}`);
+  }).join('\n');
+}
+
+/** nodeId の単独宣言行を label+shape で更新する。無ければヘッダ直後に追加する。 */
+function upsertNodeDecl(code: string, nodeId: string, label: string, shape: NodeShape): string {
+  const [open, close] = SHAPE_WRAP[shape];
+  const decl = `${nodeId}${open}${label}${close}`;
+  const id = esc(nodeId);
+  const declRe = new RegExp(`^${id}(?:${SHAPE_BRACKETS})?$`);
+  const lines = code.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (declRe.test(lines[i].trim())) {
+      const indent = (lines[i].match(/^\s*/) || [''])[0] || '    ';
+      lines[i] = indent + decl;
+      return lines.join('\n');
+    }
+  }
+  return appendAfterHeader(lines.join('\n'), `    ${decl}`);
+}
+
+export function changeNodeShape(code: string, nodeId: string, shape: NodeShape): string {
+  // 遅延分離: 現在のラベルを保ったまま、対象ノードを単独宣言へ集約して形状を変更する
+  const { label } = getNodeDef(code, nodeId);
+  const stripped = stripInlineNodeDefs(code, nodeId);
+  return upsertNodeDecl(stripped, nodeId, label, shape);
 }
 
 export function setDirection(code: string, direction: string): string {
@@ -71,25 +118,10 @@ export function setDirection(code: string, direction: string): string {
 }
 
 export function editNodeLabel(code: string, nodeId: string, newLabel: string): string {
-  const id = esc(nodeId);
-  // Replace first occurrence of nodeId followed by any shape bracket
-  const re = new RegExp(
-    `(\\b${id})(\\[(?:[^\\]]*)]|\\{[^}]*}|\\(\\[[^\\]]*]\\)|\\(\\([^)]*\\)\\)|\\([^)]*\\))`,
-    ''
-  );
-  const updated = code.replace(re, (_, nid, shape) => {
-    if (shape.startsWith('['))   return `${nid}[${newLabel}]`;
-    if (shape.startsWith('{'))   return `${nid}{${newLabel}}`;
-    if (shape.startsWith('(['))  return `${nid}([${newLabel}])`;
-    if (shape.startsWith('(('))  return `${nid}((${newLabel}))`;
-    if (shape.startsWith('('))   return `${nid}(${newLabel})`;
-    return `${nid}[${newLabel}]`;
-  });
-  // If nodeId had no shape bracket, add a standalone definition
-  if (updated === code) {
-    return appendAfterHeader(code, `    ${nodeId}[${newLabel}]`);
-  }
-  return updated;
+  // 遅延分離: 現在の形状を保ったまま、対象ノードを単独宣言へ集約してラベルを変更する
+  const { shape } = getNodeDef(code, nodeId);
+  const stripped = stripInlineNodeDefs(code, nodeId);
+  return upsertNodeDecl(stripped, nodeId, newLabel, shape);
 }
 
 export function addNode(code: string): { code: string; nodeId: string } {
@@ -119,6 +151,7 @@ export function deleteNode(code: string, nodeId: string): string {
   return result.join('\n');
 }
 
+// 遅延分離ポリシー: エッジは常に ID 参照のみで追加する（ノード定義は単独宣言行が持つ）。
 export function addEdge(code: string, from: string, to: string, label?: string): string {
   const arrow = label ? `-->|${label}|` : `-->`;
   return code.trimEnd() + `\n    ${from} ${arrow} ${to}\n`;
