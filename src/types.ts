@@ -94,7 +94,7 @@ export type FlowWebToExt =
   | { type: 'editEdge'; from: string; to: string; idx: number; label: string }
   | { type: 'deleteEdge'; from: string; to: string; idx: number }
   | { type: 'changeEdgeStyle'; from: string; to: string; idx: number; style: EdgeStyle }
-  | { type: 'setDirection'; direction: string }
+  | { type: 'changeDirection'; direction: string }
   | { type: 'undo'; code: string }
   | { type: 'save' }
   | { type: 'switchType'; diagramType: 'gantt' | 'flowchart' };

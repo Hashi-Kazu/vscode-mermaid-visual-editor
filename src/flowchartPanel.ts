@@ -63,7 +63,7 @@ export class FlowchartPanel {
           case 'editEdge':      await this._applyOp(c => editEdgeLabel(c, msg.from, msg.to, msg.idx, msg.label)); break;
           case 'deleteEdge':       await this._applyOp(c => deleteEdge(c, msg.from, msg.to, msg.idx)); break;
           case 'changeEdgeStyle': await this._applyOp(c => changeEdgeStyle(c, msg.from, msg.to, msg.idx, msg.style)); break;
-          case 'setDirection':  await this._applyOp(c => setDirection(c, msg.direction)); break;
+          case 'changeDirection': await this._applyOp(c => setDirection(c, msg.direction)); break;
           case 'undo':          await this._applyRaw(msg.code); break;
           case 'save':          await this._document.save(); this._panel.webview.postMessage({ type: 'saved' }); break;
         }
@@ -204,7 +204,7 @@ export class FlowchartPanel {
     <button id="btn-fit">⊡ 全体表示</button>
     <span class="toolbar-sep"></span>
     <label class="toolbar-label" for="sel-direction">方向</label>
-    <select id="sel-direction" disabled>
+    <select id="sel-direction">
       <option value="TD">上→下 (TD)</option>
       <option value="LR">左→右 (LR)</option>
       <option value="BT">下→上 (BT)</option>
