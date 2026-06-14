@@ -170,11 +170,15 @@
       // Hover: show ports
       nodeEl.addEventListener('mouseenter', () => {
         nodeEl.classList.add('fc-node-hover');
+        cancelHidePorts();
         if (!isDraggingPort) showPorts(nodeId);
       });
       nodeEl.addEventListener('mouseleave', () => {
         nodeEl.classList.remove('fc-node-hover');
-        if (!isDraggingPort) hidePorts(nodeId);
+        // ポートはノードの上に重なるため、カーソルがポートへ移動すると
+        // ノードの mouseleave が発火する。即時に隠すとポートを掴めないため、
+        // 遅延して隠し、ノード／ポートへ再進入した場合はキャンセルする。
+        if (!isDraggingPort) scheduleHidePorts(nodeId);
       });
 
       // Right-click context menu
@@ -280,6 +284,19 @@
 
   // ── Ports ─────────────────────────────────────────────────────────────────
   const portElements = new Map(); // nodeId -> [portEl, ...]
+  let portHideTimer = null;
+
+  function scheduleHidePorts(nodeId) {
+    clearTimeout(portHideTimer);
+    portHideTimer = setTimeout(() => {
+      if (!isDraggingPort) hidePorts(nodeId);
+    }, 150);
+  }
+
+  function cancelHidePorts() {
+    clearTimeout(portHideTimer);
+    portHideTimer = null;
+  }
 
   function showPorts(nodeId) {
     const info = nodeRegistry.get(nodeId);
@@ -305,9 +322,15 @@
       document.body.appendChild(port);
       ports.push(port);
 
+      // ポートにカーソルが乗っている間はノードの mouseleave による
+      // 自動非表示をキャンセルし、確実に掴めるようにする
+      port.addEventListener('mouseenter', cancelHidePorts);
+      port.addEventListener('mouseleave', () => scheduleHidePorts(nodeId));
+
       port.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
+        cancelHidePorts();
         // ポート div は 10×10px なので中心から線を引く
         startPortDrag(nodeId, pos.x + 5, pos.y + 5);
       });
