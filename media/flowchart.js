@@ -228,6 +228,30 @@
         e.stopPropagation();
         showEdgeContextMenu(e, entry);
       });
+
+      // 当たり判定を広げる: エッジ線に沿った透明な太いパスを重ね、
+      // 細い実線(2px)の上だけでなく周辺の帯でも選択・編集できるようにする。
+      const d = edgeEl.getAttribute('d');
+      if (d && edgeEl.parentNode) {
+        const hit = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        hit.setAttribute('d', d);
+        hit.setAttribute('fill', 'none');
+        hit.setAttribute('stroke', 'transparent');
+        hit.setAttribute('stroke-width', '14');
+        hit.setAttribute('stroke-linecap', 'round');
+        hit.classList.add('fc-edge-hit');
+        hit.style.cursor = 'pointer';
+        hit.style.pointerEvents = 'stroke';
+        edgeEl.parentNode.insertBefore(hit, edgeEl.nextSibling);
+        hit.addEventListener('click', (e) => { e.stopPropagation(); selectEdge(entry); });
+        hit.addEventListener('dblclick', (e) => { e.stopPropagation(); startEdgeLabelEdit(entry); });
+        hit.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          showEdgeContextMenu(e, entry);
+        });
+        entry.hitEl = hit;
+      }
     });
 
     // ── Edge labels ──
@@ -652,14 +676,14 @@
   }
 
   canvasWrap.addEventListener('click', (e) => {
-    if (!e.target.closest('g.node, .edgePath, .edgeLabel')) {
+    if (!e.target.closest('g.node, .edgePath, .flowchart-link, .fc-edge-hit, .edgeLabel')) {
       clearSelection();
     }
   });
 
   // ダブルクリックで空白部分にノードを追加する
   canvasWrap.addEventListener('dblclick', (e) => {
-    if (e.target.closest('g.node, .edgePath, .edgeLabel, .fc-menu, .fc-port, #fc-edit-overlay')) return;
+    if (e.target.closest('g.node, .edgePath, .flowchart-link, .fc-edge-hit, .edgeLabel, .fc-menu, .fc-port, #fc-edit-overlay')) return;
     if (!rawCode) return;
     e.preventDefault();
 
@@ -675,7 +699,7 @@
     if (e.button !== 0) return;
     const target = e.target;
     // Only pan on background (not on nodes or edges)
-    if (target.closest('g.node, .edgePath, .edgeLabel, .fc-menu, .fc-port, #fc-edit-overlay')) return;
+    if (target.closest('g.node, .edgePath, .flowchart-link, .fc-edge-hit, .edgeLabel, .fc-menu, .fc-port, #fc-edit-overlay')) return;
     isPanning = true;
     panStartX = e.clientX; panStartY = e.clientY;
     panStartTx = tx; panStartTy = ty;
