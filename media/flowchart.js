@@ -147,6 +147,11 @@
     edgeRegistry = [];
     edgeCounts = new Map();
 
+    // 再レンダリングで古いノード要素が消えても、body に追加したポート div は
+    // 残り続けて画面に取り残される。各セットアップ時に確実に掃除する。
+    cancelHidePorts();
+    hideAllPorts();
+
     const svgEl = container.querySelector('svg');
     if (!svgEl) return;
 
@@ -226,26 +231,33 @@
     });
 
     // ── Edge labels ──
-    // Mermaid の edgeLabel id は バージョンによって "L-A-B-0-label" / "L_A_B_0" など
-    // 書式が不安定なため id に依存せず、edgePath と edgeLabel の DOM 順序（index）が
-    // 対応することを利用して from/to を解決する。
-    const labelEls = Array.from(svgEl.querySelectorAll('.edgeLabel'));
+    // Mermaid 11 のラベル構造:
+    //   <g class="edgeLabel"><g class="label" data-id="L_{from}_{to}_{n}">…<span class="edgeLabel">
+    // 内側の <span> にも class="edgeLabel" が付くため '.edgeLabel' で集めると要素数が
+    // 2倍になり DOM 順インデックスでは対応が崩れる（別エッジのラベルを編集する不具合の原因）。
+    // そこで data-id（エッジID）から from/to/連番を解いて確実に対応付ける。
+    const labelOuters = Array.from(svgEl.querySelectorAll('g.edgeLabel'));
+    labelOuters.forEach(outer => {
+      const lg = outer.querySelector('[data-id]');
+      const did = lg ? (lg.getAttribute('data-id') || '') : '';
+      const m = did.match(/L[-_](.+?)[-_](.+?)[-_](\d+)$/);
+      if (!m) return;
+      const from = m[1], to = m[2], lidx = parseInt(m[3], 10);
+      const entry =
+        edgeRegistry.find(e => e.from === from && e.to === to && e.idx === lidx) ||
+        edgeRegistry.find(e => e.from === from && e.to === to && !e.labelEl);
+      if (!entry) return;
+      entry.labelEl = outer;
 
-    labelEls.forEach((labelEl, idx) => {
-      // DOM 順序で対応する edgeRegistry エントリを引く
-      const edgeInfo = edgeRegistry[idx] ?? null;
-      if (!edgeInfo) return;
-      edgeInfo.labelEl = labelEl;
-
-      labelEl.style.cursor = 'pointer';
-      labelEl.addEventListener('dblclick', (e) => {
+      outer.style.cursor = 'pointer';
+      outer.addEventListener('dblclick', (e) => {
         e.stopPropagation();
-        startEdgeLabelEdit(edgeInfo);
+        startEdgeLabelEdit(entry);
       });
-      labelEl.addEventListener('contextmenu', (e) => {
+      outer.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        showEdgeContextMenu(e, edgeInfo);
+        showEdgeContextMenu(e, entry);
       });
     });
   }
@@ -668,6 +680,9 @@
     panStartX = e.clientX; panStartY = e.clientY;
     panStartTx = tx; panStartTy = ty;
     canvasWrap.style.cursor = 'grabbing';
+    // ポートは固定座標で body に配置されるため、パン中は取り残されないよう消す
+    cancelHidePorts();
+    hideAllPorts();
     e.preventDefault();
   });
 
@@ -684,6 +699,9 @@
 
   canvasWrap.addEventListener('wheel', (e) => {
     e.preventDefault();
+    // ズームするとポートの固定座標がノードからずれるため消す
+    cancelHidePorts();
+    hideAllPorts();
     const rect = canvasWrap.getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
