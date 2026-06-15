@@ -333,12 +333,17 @@ export class EditorPanel {
   }
 
   private async _initFlowchart(): Promise<void> {
+    // 遅延分離ポリシーに合わせ、ノードは単独宣言・エッジはID参照のみで挿入する
     const template =
       '```mermaid\n' +
       'flowchart TD\n' +
-      '    A[開始] --> B{条件}\n' +
-      '    B -->|はい| C[処理A]\n' +
-      '    B -->|いいえ| D[終了]\n' +
+      '    A[開始]\n' +
+      '    B{条件}\n' +
+      '    C[処理A]\n' +
+      '    D[終了]\n' +
+      '    A --> B\n' +
+      '    B -->|はい| C\n' +
+      '    B -->|いいえ| D\n' +
       '```';
 
     await this._insertTemplate(template, 'フローチャートの挿入に失敗しました。');

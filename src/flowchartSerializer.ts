@@ -244,9 +244,32 @@ function lineReferencesNode(t: string, nodeId: string): boolean {
   return new RegExp(`(?:^|\\s|\\|)${escaped}(?:[\\[\\({]|\\s|$|-->|---|\\|)`).test(t);
 }
 
+function leadingNodeId(token: string): string | null {
+  const m = token.trim().match(/^([A-Za-z0-9_][A-Za-z0-9_-]*)/);
+  return m ? m[1] : null;
+}
+
+/** エッジ行の始点・終点ノードIDを実際にパースして返す（ラベルは除去）。 */
+function edgeEndpoints(t: string): { from: string; to: string } | null {
+  if (!isEdgeLine(t)) return null;
+  // ラベルを除去して端点解決を単純化する
+  const s = t
+    .replace(/(-\.->|==>|---|-->|-\.-)\|[^|]*\|/, '$1') // パイプラベル A -->|x| B
+    .replace(/\s--\s+\S.*?-->/, ' -->');                // インラインラベル A -- x --> B
+  // 連結子の長いもの／曖昧なものを先に並べて部分一致を防ぐ
+  const m = s.match(/^(.+?)\s*(-\.->|-\.-|==>|---|-->)\s*(.+)$/);
+  if (!m) return null;
+  const from = leadingNodeId(m[1]);
+  const to = leadingNodeId(m[3]);
+  if (!from || !to) return null;
+  return { from, to };
+}
+
 function lineConnects(t: string, from: string, to: string): boolean {
-  // Line must reference both from and to as connected nodes
-  return lineReferencesNode(t, from) && lineReferencesNode(t, to);
+  // 始点→終点の向きまで一致するエッジ行のみを対象にする
+  // （非方向の一致だと A-->B と B-->A を取り違え、別のエッジを変更してしまう）
+  const ep = edgeEndpoints(t);
+  return !!ep && ep.from === from && ep.to === to;
 }
 
 function isStandaloneNodeDef(t: string, escapedId: string): boolean {

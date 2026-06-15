@@ -65,6 +65,29 @@ test('changeEdgeStyle swaps the connector for the indexed edge', () => {
   assert.match(out, /A\[開始\] -\.-> B\{条件\}/);
 });
 
+test('changeEdgeStyle targets only the directional edge, not the reverse', () => {
+  const code = 'flowchart TD\n    A --> B\n    B --> A';
+  const out = changeEdgeStyle(code, 'A', 'B', 0, 'thick-arrow');
+  // A --> B だけが太線になり、逆向き B --> A は変わらない
+  assert.match(out, /^\s*A ==> B$/m);
+  assert.match(out, /^\s*B --> A$/m);
+});
+
+test('editEdgeLabel does not bleed into the reverse-direction edge', () => {
+  const code = 'flowchart TD\n    A --> B\n    B --> A';
+  const out = editEdgeLabel(code, 'B', 'A', 0, 'ラベル');
+  assert.match(out, /^\s*A --> B$/m);          // 無関係なまま
+  assert.match(out, /^\s*B -->\|ラベル\| A$/m); // 対象のみ更新
+});
+
+test('deleteEdge removes only the directional edge among parallels', () => {
+  const code = 'flowchart TD\n    A --> B\n    B --> A\n    A --> B';
+  const out = deleteEdge(code, 'A', 'B', 1); // 2本目の A --> B を削除
+  const abCount = out.split('\n').filter(l => /^\s*A --> B$/.test(l)).length;
+  assert.equal(abCount, 1);
+  assert.match(out, /^\s*B --> A$/m); // 逆向きは残る
+});
+
 test('addEdge appends an arrow line', () => {
   const out = addEdge('flowchart TD\n    A --> B', 'B', 'C');
   assert.match(out, /B --> C/);

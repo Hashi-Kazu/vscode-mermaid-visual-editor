@@ -16,7 +16,7 @@
 
   // Pan/zoom state
   const MIN_SCALE = 0.1;
-  const MAX_SCALE = 8; // 拡大上限（従来 4 から引き上げ）
+  const MAX_SCALE = 12; // 拡大上限（リセット時に小さな図でも十分大きく表示できるよう引き上げ）
   let tx = 0, ty = 0, scale = 1;
   let isPanning = false;
   let panStartX = 0, panStartY = 0, panStartTx = 0, panStartTy = 0;
@@ -729,33 +729,31 @@
     const wrap = canvasWrap.getBoundingClientRect();
     if (wrap.width <= 0 || wrap.height <= 0) return; // panel not yet laid out
 
-    // Use viewBox dimensions as the SVG's natural rendered size
-    // (when no explicit width/height, viewBox width/height = CSS pixels in browser)
-    let svgW = 0, svgH = 0;
-    const vb = svgEl.viewBox && svgEl.viewBox.baseVal;
-    if (vb && vb.width > 0) {
-      svgW = vb.width;
-      svgH = vb.height;
-    } else {
-      const bb = svgEl.getBBox ? svgEl.getBBox() : null;
-      if (bb && bb.width > 0) { svgW = bb.width; svgH = bb.height; }
-    }
-    if (svgW <= 0 || svgH <= 0) return;
+    // viewBox の寸法に依存せず、実際に描画された SVG の画面上ジオメトリから
+    // 「変換前の実寸」と「キャンバスローカル座標での位置」を逆算する。
+    // これにより全ノード・全エッジ（ラベル含む）を正確に中央へ収められる。
+    const r = svgEl.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return;
 
-    const halfPad = 24; // #mermaid-container の片側パディング
-    const margin = 24;  // ビュー端の余白（片側）
+    const realW = r.width  / scale; // 現在の scale を打ち消した実寸
+    const realH = r.height / scale;
+    // SVG 左上のキャンバスローカル座標（#canvas の transform を逆算）
+    const svgLeftLocal = (r.left - (wrap.left + tx)) / scale;
+    const svgTopLocal  = (r.top  - (wrap.top  + ty)) / scale;
 
-    // 全ノード・エッジが収まる範囲で可能な限り拡大する（最大拡大）。
-    // コンテナのパディングは余白として扱い、SVG 本体がビューを極力埋めるようにする。
+    const margin = 12; // ビュー端の余白（片側）。小さくして拡大率を上げる
+
+    // 全ノード・エッジが収まる範囲で可能な限り拡大する（最大拡大）
     const fitScale = Math.min(
-      (wrap.width  - margin * 2) / svgW,
-      (wrap.height - margin * 2) / svgH
+      (wrap.width  - margin * 2) / realW,
+      (wrap.height - margin * 2) / realH
     );
-    scale = Math.max(MIN_SCALE, Math.min(fitScale, MAX_SCALE));
+    const newScale = Math.max(MIN_SCALE, Math.min(fitScale, MAX_SCALE));
 
-    // SVG 本体（図形領域）の中心をビュー中央へ合わせてセンタリングする
-    tx = wrap.width  / 2 - scale * (halfPad + svgW / 2);
-    ty = wrap.height / 2 - scale * (halfPad + svgH / 2);
+    // SVG 本体の中心をビュー中央へ合わせてセンタリングする
+    tx = wrap.width  / 2 - newScale * (svgLeftLocal + realW / 2);
+    ty = wrap.height / 2 - newScale * (svgTopLocal  + realH / 2);
+    scale = newScale;
     setTransform();
   }
 
