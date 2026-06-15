@@ -538,6 +538,12 @@
     editState = null;
   }
 
+  // 編集中なら確定する。パン・ズーム・別所クリックなどで
+  // 入力欄と図形の表示位置がずれるのを防ぐため、それらの操作の直前に呼ぶ。
+  function commitEditIfActive() {
+    if (editState) commitEdit();
+  }
+
   editInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter')  { e.preventDefault(); commitEdit(); }
     if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); }
@@ -702,6 +708,9 @@
   });
 
   canvasWrap.addEventListener('mousedown', (e) => {
+    // 入力欄外のどこかをクリックしたら編集を確定する
+    // （パン用の preventDefault が blur を抑止するため明示的に確定が必要）
+    if (!e.target.closest('#fc-edit-overlay')) commitEditIfActive();
     if (e.button !== 0) return;
     const target = e.target;
     // Only pan on background (not on nodes or edges)
@@ -729,6 +738,8 @@
 
   canvasWrap.addEventListener('wheel', (e) => {
     e.preventDefault();
+    // ズームすると入力欄の表示位置がずれるため、編集中なら確定する
+    commitEditIfActive();
     // ズームするとポートの固定座標がノードからずれるため消す
     cancelHidePorts();
     hideAllPorts();
@@ -771,6 +782,9 @@
 
   // ── Fit view ─────────────────────────────────────────────────────────────
   function fitView() {
+    // リセット（拡大率・位置の変更）で入力欄がずれるため、編集中なら確定する
+    commitEditIfActive();
+
     const svgEl = container.querySelector('svg');
     if (!svgEl) return;
 
