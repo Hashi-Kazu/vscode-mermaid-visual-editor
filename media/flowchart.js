@@ -100,6 +100,9 @@
   let renderId = 0;
   async function renderDiagram() {
     clearSelection();
+    // 再レンダリングで SVG が差し替わると編集オーバーレイの位置が陳腐化するため、
+    // 進行中の編集（外部からのドキュメント変更時など）は破棄する。
+    cancelEdit();
     if (!rawCode) return;
 
     mermaid.initialize({
@@ -315,10 +318,6 @@
     });
     if (from && to && !(from === 'a1' && to === 'b1')) return { from, to };
     return null;
-  }
-
-  function findEdgeByFromTo(from, to) {
-    return edgeRegistry.find(e => e.from === from && e.to === to) || null;
   }
 
   function getLabelText(labelEl) {
@@ -915,12 +914,27 @@
     placeMenu(menu, rect.left, rect.bottom + 4);
   }
 
+  // エクスポート用に、編集UI由来の要素・装飾を取り除いた SVG 文字列を返す
+  function serializeCleanSvg(svgEl) {
+    const clone = svgEl.cloneNode(true);
+    // 当たり判定用の透明パスを除去
+    clone.querySelectorAll('.fc-edge-hit').forEach(el => el.remove());
+    // 選択・ホバーなどの一時的な装飾クラスを除去
+    clone.querySelectorAll('.fc-selected, .fc-node-hover, .fc-node-drop-target')
+      .forEach(el => el.classList.remove('fc-selected', 'fc-node-hover', 'fc-node-drop-target'));
+    // インラインで付与した cursor / pointer-events を除去
+    clone.querySelectorAll('[style]').forEach(el => {
+      el.style.removeProperty('cursor');
+      el.style.removeProperty('pointer-events');
+    });
+    return new XMLSerializer().serializeToString(clone);
+  }
+
   function exportAs(format) {
     const svgEl = container.querySelector('svg');
     if (!svgEl) return;
 
-    const serializer = new XMLSerializer();
-    const svgStr = serializer.serializeToString(svgEl);
+    const svgStr = serializeCleanSvg(svgEl);
 
     if (format === 'svg') {
       send({ type: 'export', format: 'svg', data: svgStr });
