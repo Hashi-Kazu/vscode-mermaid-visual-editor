@@ -500,10 +500,11 @@
   }
 
   function showEditInput(bbox, value) {
-    // 現在のズーム倍率に合わせて入力欄の文字サイズを拡大する。
-    // 固定サイズだと拡大表示中は図のテキストに対して極端に小さく見えてしまう。
-    const fontSize = Math.max(16, Math.min(16 * scale, 64));
-    const w = Math.max(bbox.width + fontSize, fontSize * 6);
+    // ズーム倍率に合わせて入力欄の文字サイズを少しだけ拡大する。
+    // 固定だと拡大表示中に小さく見えるが、倍率比例だと大きすぎるため
+    // 平方根で緩やかに増やし、上限を抑える。
+    const fontSize = Math.max(14, Math.min(14 * Math.sqrt(scale), 26));
+    const w = Math.max(bbox.width + fontSize, fontSize * 5);
     editInput.value = value;
     editInput.style.fontSize = fontSize + 'px';
     editInput.style.width = w + 'px';
