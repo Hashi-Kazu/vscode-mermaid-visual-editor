@@ -500,11 +500,16 @@
   }
 
   function showEditInput(bbox, value) {
-    const w = Math.max(bbox.width + 20, 100);
+    // 現在のズーム倍率に合わせて入力欄の文字サイズを拡大する。
+    // 固定サイズだと拡大表示中は図のテキストに対して極端に小さく見えてしまう。
+    const fontSize = Math.max(16, Math.min(16 * scale, 64));
+    const w = Math.max(bbox.width + fontSize, fontSize * 6);
     editInput.value = value;
+    editInput.style.fontSize = fontSize + 'px';
     editInput.style.width = w + 'px';
-    editOverlay.style.left = (bbox.left + bbox.width / 2 - w / 2) + 'px';
-    editOverlay.style.top  = (bbox.top + bbox.height / 2 - 16) + 'px';
+    // bbox 中心へ配置（CSS の translate(-50%,-50%) で中央寄せ）
+    editOverlay.style.left = (bbox.left + bbox.width / 2) + 'px';
+    editOverlay.style.top  = (bbox.top + bbox.height / 2) + 'px';
     editOverlay.classList.add('visible');
     editInput.focus();
     editInput.select();

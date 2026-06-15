@@ -181,6 +181,8 @@ path.flowchart-link.fc-selected {
   position: fixed;
   z-index: 100;
   display: none;
+  /* showEditInput が bbox 中心へ配置するため、自身の中心で合わせる */
+  transform: translate(-50%, -50%);
 }
 #fc-edit-overlay.visible { display: block; }
 #fc-edit-input {
@@ -188,9 +190,9 @@ path.flowchart-link.fc-selected {
   border-radius: 4px;
   background: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
-  font-size: 13px;
+  font-size: 16px; /* 既定値。実際のサイズは showEditInput がズームに応じて指定する */
   font-family: var(--vscode-font-family);
-  padding: 3px 8px;
+  padding: 0.25em 0.6em; /* 文字サイズに比例 */
   outline: none;
   min-width: 80px;
   text-align: center;
