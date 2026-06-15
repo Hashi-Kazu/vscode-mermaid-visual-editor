@@ -14,6 +14,20 @@
   let selectedNodeId = null;
   let selectedEdge = null; // { el, from, to, idx }
 
+  // 新規エッジ（ポートドラッグ追加）の既定線種。
+  // MD には保存できないため、ビューア表示中のみ保持する一時設定。
+  // vscode.getState/setState によりパネルの再表示（hide/show）をまたいで維持する。
+  const VALID_EDGE_STYLES = [
+    'solid-arrow', 'dotted-arrow', 'thick-arrow', 'solid-no-arrow', 'dotted-no-arrow',
+  ];
+  let defaultEdgeStyle = 'solid-arrow';
+  (function restoreDefaultEdgeStyle() {
+    const st = vscode.getState && vscode.getState();
+    if (st && VALID_EDGE_STYLES.indexOf(st.defaultEdgeStyle) !== -1) {
+      defaultEdgeStyle = st.defaultEdgeStyle;
+    }
+  })();
+
   // Pan/zoom state
   const MIN_SCALE = 0.1;
   const MAX_SCALE = 12; // 拡大上限（リセット時に小さな図でも十分大きく表示できるよう引き上げ）
@@ -42,6 +56,7 @@
   const btnFit       = document.getElementById('btn-fit');
   const btnExport    = document.getElementById('btn-export');
   const selDirection = document.getElementById('sel-direction');
+  const selEdgeStyle = document.getElementById('sel-edge-style');
   const statusLabel  = document.getElementById('status-label');
   const editOverlay  = document.getElementById('fc-edit-overlay');
   const editInput    = document.getElementById('fc-edit-input');
@@ -447,7 +462,7 @@
       const r = info.el.getBoundingClientRect();
       if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) {
         pushUndo();
-        send({ type: 'addEdge', from: dragFromNodeId, to: nodeId });
+        send({ type: 'addEdge', from: dragFromNodeId, to: nodeId, style: defaultEdgeStyle });
         break;
       }
     }
@@ -972,6 +987,19 @@
     send({ type: 'changeDirection', direction: selDirection.value });
   });
 
+  // 既定エッジ線種（ビューア内の一時設定。MDには保存しない）
+  if (selEdgeStyle) {
+    selEdgeStyle.value = defaultEdgeStyle;
+    selEdgeStyle.addEventListener('change', () => {
+      if (VALID_EDGE_STYLES.indexOf(selEdgeStyle.value) === -1) return;
+      defaultEdgeStyle = selEdgeStyle.value;
+      if (vscode.setState) {
+        vscode.setState(Object.assign({}, (vscode.getState && vscode.getState()) || {}, { defaultEdgeStyle }));
+      }
+      showStatus('既定エッジを変更しました');
+    });
+  }
+
   document.getElementById('btn-init-flowchart').addEventListener('click', () => {
     send({ type: 'initFlowchart' });
   });
@@ -1002,6 +1030,7 @@
     btnFit.disabled       = !enabled;
     btnExport.disabled    = !enabled;
     selDirection.disabled = !enabled;
+    if (selEdgeStyle) selEdgeStyle.disabled = !enabled;
   }
 
   function showEmpty() {

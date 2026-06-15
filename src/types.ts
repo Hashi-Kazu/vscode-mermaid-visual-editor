@@ -84,7 +84,7 @@ export type FlowWebToExt =
   | { type: 'addNode'; x?: number; y?: number }
   | { type: 'deleteNode'; nodeId: string }
   | { type: 'changeNodeShape'; nodeId: string; shape: NodeShape }
-  | { type: 'addEdge'; from: string; to: string }
+  | { type: 'addEdge'; from: string; to: string; style?: EdgeStyle }
   | { type: 'editEdge'; from: string; to: string; idx: number; label: string }
   | { type: 'deleteEdge'; from: string; to: string; idx: number }
   | { type: 'changeEdgeStyle'; from: string; to: string; idx: number; style: EdgeStyle }

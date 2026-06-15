@@ -152,8 +152,12 @@ export function deleteNode(code: string, nodeId: string): string {
 }
 
 // 遅延分離ポリシー: エッジは常に ID 参照のみで追加する（ノード定義は単独宣言行が持つ）。
-export function addEdge(code: string, from: string, to: string, label?: string): string {
-  const arrow = label ? `-->|${label}|` : `-->`;
+// style は新規エッジの既定線種（ビューア側で保持する一時設定。未指定は実線矢印）。
+export function addEdge(
+  code: string, from: string, to: string, label?: string, style?: EdgeStyle
+): string {
+  const connector = styleToConnector(style ?? 'solid-arrow');
+  const arrow = label ? `${connector}|${label}|` : connector;
   return code.trimEnd() + `\n    ${from} ${arrow} ${to}\n`;
 }
 

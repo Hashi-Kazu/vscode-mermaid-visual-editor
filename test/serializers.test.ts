@@ -93,6 +93,14 @@ test('addEdge appends an arrow line', () => {
   assert.match(out, /B --> C/);
 });
 
+test('addEdge honors the default edge style', () => {
+  assert.match(addEdge('flowchart TD\n    A --> B', 'B', 'C', undefined, 'dotted-arrow'), /^\s*B -\.-> C$/m);
+  assert.match(addEdge('flowchart TD\n    A --> B', 'B', 'C', undefined, 'thick-arrow'), /^\s*B ==> C$/m);
+  assert.match(addEdge('flowchart TD\n    A --> B', 'B', 'C', undefined, 'solid-no-arrow'), /^\s*B --- C$/m);
+  // 未指定は実線矢印
+  assert.match(addEdge('flowchart TD\n    A --> B', 'B', 'C'), /^\s*B --> C$/m);
+});
+
 test('editEdgeLabel sets and removes a pipe label', () => {
   const set = editEdgeLabel('flowchart TD\n    A --> B', 'A', 'B', 0, 'yes');
   assert.match(set, /A -->\|yes\| B/);

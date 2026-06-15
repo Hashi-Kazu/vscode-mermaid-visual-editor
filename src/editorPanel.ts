@@ -265,7 +265,7 @@ export class EditorPanel {
       case 'addNode':          await this._addFlowNode(); break;
       case 'deleteNode':       await this._flowOp(c => deleteNode(c, msg.nodeId)); break;
       case 'changeNodeShape':  await this._flowOp(c => changeNodeShape(c, msg.nodeId, msg.shape)); break;
-      case 'addEdge':          await this._flowOp(c => addEdge(c, msg.from, msg.to)); break;
+      case 'addEdge':          await this._flowOp(c => addEdge(c, msg.from, msg.to, undefined, msg.style)); break;
       case 'editEdge':         await this._flowOp(c => editEdgeLabel(c, msg.from, msg.to, msg.idx, msg.label)); break;
       case 'deleteEdge':       await this._flowOp(c => deleteEdge(c, msg.from, msg.to, msg.idx)); break;
       case 'changeEdgeStyle':  await this._flowOp(c => changeEdgeStyle(c, msg.from, msg.to, msg.idx, msg.style)); break;
@@ -547,6 +547,15 @@ export class EditorPanel {
       <option value="LR">左→右 (LR)</option>
       <option value="BT">下→上 (BT)</option>
       <option value="RL">右→左 (RL)</option>
+    </select>
+    <span class="toolbar-sep"></span>
+    <label class="toolbar-label" for="sel-edge-style" title="ポートからドラッグして追加する新しいエッジの既定線種（ビューア表示中のみ保持・MDには保存されません）">既定エッジ</label>
+    <select id="sel-edge-style" disabled title="ポートからドラッグして追加する新しいエッジの既定線種（ビューア表示中のみ保持・MDには保存されません）">
+      <option value="solid-arrow">実線矢印 (--&gt;)</option>
+      <option value="dotted-arrow">点線矢印 (-.-&gt;)</option>
+      <option value="thick-arrow">太線矢印 (==&gt;)</option>
+      <option value="solid-no-arrow">矢印なし実線 (---)</option>
+      <option value="dotted-no-arrow">矢印なし点線 (-.-)</option>
     </select>
     <span id="status-label"></span>
     <span class="mode-badge">
