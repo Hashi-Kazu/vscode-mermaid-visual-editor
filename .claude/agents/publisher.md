@@ -1,6 +1,6 @@
 ---
 name: publisher
-description: .vsix のビルドと git push を担当するリリース担当。「ビルドして」「パッケージして」「プッシュして」「リリースして」などの指示で使う。main への push で GitHub Actions が Marketplace 公開を自動実行する。コードの機能変更はしない。
+description: .vsix のビルドと git push を担当するリリース担当。「ビルドして」「パッケージして」「プッシュして」「リリースして」などの指示で使う。main への push で GitHub Actions が Marketplace 公開を自動実行する。
 model: inherit
 tools: Bash, Read, Glob
 disallowedTools: [Edit, Write, NotebookEdit]
