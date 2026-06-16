@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { parseGantt } from './ganttParser';
 import { ganttToCode, applyToDocument as ganttApply } from './ganttSerializer';
 import { parseFlowchart } from './flowchartParser';
+import { detectConflict, normalizeText } from './conflictDetection';
 import {
   setDirection, editNodeLabel, addNode, deleteNode,
   addEdge, editEdgeLabel, deleteEdge, changeEdgeStyle, changeNodeShape,
@@ -30,6 +32,13 @@ export class EditorPanel {
   private _isOperating = false;
   private _debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private _applyQueue: Promise<void> = Promise.resolve();
+
+  // The exact document text (newline-normalized) the current displayed/cached
+  // state was last derived from. Used as the optimistic-concurrency "base":
+  // before a full-document overwrite we verify the live/disk content still
+  // equals this, so a concurrent external edit (shared drive / Git pull) is
+  // detected instead of being silently clobbered. null until the first sync.
+  private _baseText: string | null = null;
 
   // Gantt-specific state
   private _ganttData: GanttData | null = null;
@@ -212,28 +221,10 @@ export class EditorPanel {
   }
 
   private async _doApplyGanttData(data: GanttData): Promise<void> {
-    this._isOperating = true;
-    try {
-      const newCode = ganttToCode(data);
-      const docText = this._document.getText();
-      const newDocText = ganttApply(docText, this._document.fileName, newCode);
-      const edit = new vscode.WorkspaceEdit();
-      edit.replace(
-        this._document.uri,
-        new vscode.Range(
-          this._document.positionAt(0),
-          this._document.positionAt(docText.length)
-        ),
-        newDocText
-      );
-      const ok = await vscode.workspace.applyEdit(edit);
-      if (ok) {
-        await this._document.save();
-        this._panel.webview.postMessage({ type: 'saved' });
-      }
-    } finally {
-      this._isOperating = false;
-    }
+    const newCode = ganttToCode(data);
+    const docText = this._document.getText();
+    const newDocText = ganttApply(docText, this._document.fileName, newCode);
+    await this._writeDocument(newDocText);
   }
 
   private async _initGantt(): Promise<void> {
@@ -362,6 +353,12 @@ export class EditorPanel {
       }
     }
 
+    // Record the base snapshot the displayed state derives from, so the next
+    // write can detect concurrent external edits against it. This runs on every
+    // sync (ready / external change) — while an operation suppresses the sync,
+    // base stays put, so a write after the operation still catches the change.
+    this._baseText = normalizeText(this._document.getText());
+
     if (this._type === 'gantt') {
       this._sendGanttUpdate();
     } else if (this._type === 'flowchart') {
@@ -377,30 +374,14 @@ export class EditorPanel {
     const docText = this._document.getText();
     const newText = docText.trim() === '' ? template : docText + '\n\n' + template;
 
-    const edit = new vscode.WorkspaceEdit();
-    edit.replace(
-      this._document.uri,
-      new vscode.Range(
-        this._document.positionAt(0),
-        this._document.positionAt(docText.length)
-      ),
-      newText
-    );
-
-    this._isOperating = true;
+    let wrote = false;
     try {
-      const ok = await vscode.workspace.applyEdit(edit);
-      if (!ok) {
-        vscode.window.showErrorMessage(errMsg);
-        return;
-      }
-      await this._document.save();
+      wrote = await this._writeDocument(newText);
     } catch {
       vscode.window.showErrorMessage(errMsg);
       return;
-    } finally {
-      this._isOperating = false;
     }
+    if (!wrote) return; // applyEdit failed, or a conflict was resolved as "load latest"
     this._sendUpdate();
   }
 
@@ -411,8 +392,32 @@ export class EditorPanel {
   }
 
   private async _doWrite(newDocText: string): Promise<void> {
+    await this._writeDocument(newDocText);
+    // Flowchart: after write (or after a conflict reload), send the current
+    // rawCode so the webview re-renders from the authoritative document state.
+    if (this._type === 'flowchart') {
+      this._sendFlowchartUpdate();
+    }
+  }
+
+  // ── Optimistic concurrency control (lost-update prevention) ────────────────
+
+  /**
+   * The single full-document write primitive. Before overwriting, it verifies
+   * the document has not been changed concurrently (shared drive / Git pull /
+   * an external edit that arrived while `_isOperating` suppressed the sync). On
+   * conflict it asks the user how to resolve, prioritizing "no silent data
+   * loss". Returns true if the new content was written, false if the write was
+   * abandoned (conflict resolved as "load latest") or applyEdit failed.
+   */
+  private async _writeDocument(newDocText: string): Promise<boolean> {
     this._isOperating = true;
     try {
+      if (await this._hasConcurrentChange(newDocText)) {
+        const proceed = await this._resolveConflict(newDocText);
+        if (!proceed) return false; // user chose "load latest" — abandon this write
+      }
+
       const docText = this._document.getText();
       const edit = new vscode.WorkspaceEdit();
       edit.replace(
@@ -424,17 +429,115 @@ export class EditorPanel {
         newDocText
       );
       const ok = await vscode.workspace.applyEdit(edit);
-      if (ok) {
-        await this._document.save();
-        this._panel.webview.postMessage({ type: 'saved' });
-      }
+      if (!ok) return false;
+      await this._document.save();
+      // The write succeeded — this content is now the base for the next edit.
+      this._baseText = normalizeText(newDocText);
+      this._panel.webview.postMessage({ type: 'saved' });
+      return true;
     } finally {
       this._isOperating = false;
     }
-    // Flowchart: after write, send updated rawCode so webview re-renders
-    if (this._type === 'flowchart') {
-      this._sendFlowchartUpdate();
+  }
+
+  /**
+   * True when the live document or the on-disk file no longer matches the base
+   * snapshot the displayed state was derived from — i.e. a concurrent external
+   * edit exists. The disk is read in addition to the in-memory TextDocument
+   * because on shared drives VS Code's TextDocument can lag behind the file.
+   */
+  private async _hasConcurrentChange(outgoing: string): Promise<boolean> {
+    if (this._baseText === null) return false;
+
+    const liveText = this._document.getText();
+    if (detectConflict(this._baseText, liveText, outgoing)) return true;
+
+    let diskText: string;
+    try {
+      const bytes = await vscode.workspace.fs.readFile(this._document.uri);
+      diskText = Buffer.from(bytes).toString('utf8');
+    } catch {
+      // File missing/unreadable (e.g. deleted) — treat as no detectable
+      // conflict and let the normal write path recreate it.
+      return false;
     }
+    return detectConflict(this._baseText, diskText, outgoing);
+  }
+
+  /**
+   * Concurrent edit detected. Ask the user how to resolve, prioritizing "no
+   * silent data loss". Returns true if the caller should proceed with the
+   * overwrite ("keep mine"), false if the write must be abandoned ("load
+   * latest"). The discarded side is backed up to a sibling file first.
+   */
+  private async _resolveConflict(outgoing: string): Promise<boolean> {
+    const loadLatest = '最新を読み込む（自分の編集は破棄）';
+    const overwrite = '自分の変更で上書き（他者の変更は破棄）';
+
+    const choice = await vscode.window.showWarningMessage(
+      `別の場所で「${path.basename(this._document.uri.fsPath)}」が変更されています。` +
+        'エディタの編集をそのまま保存すると、他の変更が失われる可能性があります。',
+      { modal: true },
+      loadLatest,
+      overwrite
+    );
+
+    if (choice === overwrite) {
+      // Back up the other person's version before we discard it.
+      await this._backupConflict('remote', this._document.getText());
+      return true;
+    }
+
+    // Default (including dismissal): keep remote, discard our edit — the safe
+    // choice. Back up our serialized edit so it is not lost outright.
+    await this._backupConflict('mine', outgoing);
+    await this._reloadFromDisk();
+    return false;
+  }
+
+  /** Write a timestamped backup beside the document so neither side is lost. */
+  private async _backupConflict(which: 'mine' | 'remote', content: string): Promise<void> {
+    try {
+      const stamp = new Date()
+        .toISOString()
+        .replace(/[:.]/g, '-')
+        .replace('T', '_')
+        .slice(0, 19);
+      const dir = path.dirname(this._document.uri.fsPath);
+      const ext = path.extname(this._document.uri.fsPath);
+      const base = path.basename(this._document.uri.fsPath, ext);
+      const backupName = `${base}.conflict-${which}-${stamp}${ext}`;
+      const backupUri = vscode.Uri.file(path.join(dir, backupName));
+      await vscode.workspace.fs.writeFile(backupUri, Buffer.from(content, 'utf8'));
+    } catch {
+      // Backup is best-effort; never let it block conflict resolution.
+    }
+  }
+
+  /** Reload the document from disk and re-sync the panel to that state. */
+  private async _reloadFromDisk(): Promise<void> {
+    try {
+      const bytes = await vscode.workspace.fs.readFile(this._document.uri);
+      const diskText = Buffer.from(bytes).toString('utf8');
+      // Bring the in-memory TextDocument up to date if it lags the disk.
+      if (normalizeText(this._document.getText()) !== normalizeText(diskText)) {
+        const edit = new vscode.WorkspaceEdit();
+        edit.replace(
+          this._document.uri,
+          new vscode.Range(
+            this._document.positionAt(0),
+            this._document.positionAt(this._document.getText().length)
+          ),
+          diskText
+        );
+        await vscode.workspace.applyEdit(edit);
+        await this._document.save();
+      }
+    } catch {
+      // If the disk read fails, fall back to the current TextDocument state.
+    }
+    // _sendUpdate re-parses, re-renders the panel and refreshes the base.
+    this._sendUpdate();
   }
 
   // ── HTML builders ─────────────────────────────────────────────────────────
