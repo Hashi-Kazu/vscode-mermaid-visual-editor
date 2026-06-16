@@ -93,7 +93,7 @@
     "build": "node esbuild.js",
     "watch": "node esbuild.js --watch",
     "test": "esbuild test/serializers.test.ts test/parsers.test.ts --bundle --platform=node --format=cjs --external:vscode --outdir=dist-test && node --test dist-test/serializers.test.js dist-test/parsers.test.js",
-    "package": "vsce package"
+    "package": "npx vsce package"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
