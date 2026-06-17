@@ -145,23 +145,22 @@ export class EditorPanel {
         await this._initGantt();
         break;
       case 'editTask':
-        await this._editTask(msg.si, msg.ti, msg.patch);
+        this._editTask(msg.si, msg.ti, msg.patch);
         break;
       case 'addTask':
-        await this._addTask(msg.si, msg.afterTi, msg.task);
+        this._addTask(msg.si, msg.afterTi, msg.task);
         break;
       case 'deleteTask':
-        await this._deleteTask(msg.si, msg.ti);
+        this._deleteTask(msg.si, msg.ti);
         break;
       case 'editSection':
-        await this._editSection(msg.si, msg.name);
+        this._editSection(msg.si, msg.name);
         break;
       case 'addSection':
-        await this._addSection(msg.name);
+        this._addSection(msg.name);
         break;
       case 'structuralEdit':
-        this._ganttData = msg.gantt;
-        this._applyGanttData(msg.gantt);
+        this._structuralEdit(msg.gantt);
         break;
       case 'save':
         await this._document.save();
@@ -180,43 +179,70 @@ export class EditorPanel {
     this._panel.webview.postMessage({ type: 'update', gantt: data });
   }
 
-  private async _editTask(si: number, ti: number, patch: Partial<GanttTask>): Promise<void> {
-    if (!this._ganttData) return;
-    const task = this._ganttData.sections[si]?.tasks[ti];
-    if (!task) return;
-    Object.assign(task, patch);
-    await this._applyGanttData(this._ganttData);
+  // All gantt edits funnel through `_enqueueGantt`, which runs the cache
+  // mutation AND the write inside the same serialized queue step. This is what
+  // keeps index-based edits (editTask etc.) consistent: a `structuralEdit` that
+  // replaces `_ganttData` can never slip in between an index edit's mutation
+  // and its write, so stale (si, ti) indices can no longer hit the wrong task.
+
+  private _editTask(si: number, ti: number, patch: Partial<GanttTask>): void {
+    this._enqueueGantt(() => {
+      const task = this._ganttData?.sections[si]?.tasks[ti];
+      if (task) Object.assign(task, patch);
+    });
   }
 
-  private async _addTask(si: number, afterTi: number, task: GanttTask): Promise<void> {
-    if (!this._ganttData) return;
-    this._ganttData.sections[si]?.tasks.splice(afterTi + 1, 0, task);
-    await this._applyGanttData(this._ganttData);
+  private _addTask(si: number, afterTi: number, task: GanttTask): void {
+    this._enqueueGantt(() => {
+      this._ganttData?.sections[si]?.tasks.splice(afterTi + 1, 0, task);
+    });
   }
 
-  private async _deleteTask(si: number, ti: number): Promise<void> {
-    if (!this._ganttData) return;
-    this._ganttData.sections[si]?.tasks.splice(ti, 1);
-    await this._applyGanttData(this._ganttData);
+  private _deleteTask(si: number, ti: number): void {
+    this._enqueueGantt(() => {
+      this._ganttData?.sections[si]?.tasks.splice(ti, 1);
+    });
   }
 
-  private async _editSection(si: number, name: string): Promise<void> {
-    if (!this._ganttData) return;
-    const sec = this._ganttData.sections[si];
-    if (!sec) return;
-    sec.name = name;
-    await this._applyGanttData(this._ganttData);
+  private _editSection(si: number, name: string): void {
+    this._enqueueGantt(() => {
+      const sec = this._ganttData?.sections[si];
+      if (sec) sec.name = name;
+    });
   }
 
-  private async _addSection(name: string): Promise<void> {
-    if (!this._ganttData) return;
-    this._ganttData.sections.push({ name, tasks: [] });
-    await this._applyGanttData(this._ganttData);
+  private _addSection(name: string): void {
+    this._enqueueGantt(() => {
+      this._ganttData?.sections.push({ name, tasks: [] });
+    });
   }
 
-  private _applyGanttData(data: GanttData): void {
+  /**
+   * Full-state edit: replace the cached gantt wholesale, then write. This is the
+   * path the webview uses for every operation — it always holds the complete
+   * `ganttData`, so replacing rather than index-patching the cache removes any
+   * chance of stale (si, ti) indices applying to the wrong task after a reorder.
+   */
+  private _structuralEdit(gantt: GanttData): void {
+    // `allowNullCache` because a full replacement is self-contained and must
+    // proceed even if no prior cache exists yet.
+    this._enqueueGantt(() => { this._ganttData = gantt; }, true);
+  }
+
+  /**
+   * Serialize a cache mutation followed by a write. The mutation runs inside the
+   * queue so concurrent ops can't interleave their cache changes; the write then
+   * uses the freshly-mutated cache. On write failure (conflict resolved as "load
+   * latest" or applyEdit false) the webview is re-synced to the document state so
+   * it never silently keeps unsaved, out-of-sync content.
+   */
+  private _enqueueGantt(mutate: () => void, allowNullCache = false): void {
     this._applyQueue = this._applyQueue
-      .then(() => this._doApplyGanttData(data))
+      .then(async () => {
+        if (!this._ganttData && !allowNullCache) return;
+        mutate();
+        if (this._ganttData) await this._doApplyGanttData(this._ganttData);
+      })
       .catch(() => { /* keep queue alive */ });
   }
 
@@ -224,7 +250,12 @@ export class EditorPanel {
     const newCode = ganttToCode(data);
     const docText = this._document.getText();
     const newDocText = ganttApply(docText, this._document.fileName, newCode);
-    await this._writeDocument(newDocText);
+    const wrote = await this._writeDocument(newDocText);
+    if (!wrote) {
+      // Write abandoned (conflict "load latest") or applyEdit failed. Re-sync the
+      // webview to the authoritative document so it stops showing unsaved state.
+      this._sendGanttUpdate();
+    }
   }
 
   private async _initGantt(): Promise<void> {

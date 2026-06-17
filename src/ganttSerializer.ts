@@ -6,15 +6,22 @@ export function ganttToCode(data: GanttData): string {
   lines.push(`    dateFormat ${data.dateFormat || 'YYYY-MM-DD'}`);
   if (data.axisFormat) lines.push(`    axisFormat ${data.axisFormat}`);
 
-  for (const section of data.sections) {
+  data.sections.forEach((section, idx) => {
     if (section.name) {
       lines.push('');
       lines.push(`    section ${section.name}`);
+    } else if (idx > 0) {
+      // A non-leading unnamed section: emit an explicit boundary so the grouping
+      // survives the round-trip. Without this, its tasks would merge into the
+      // previous section on re-parse, losing structure. The leading unnamed
+      // section (idx 0) needs no marker — pre-section tasks belong to it.
+      lines.push('');
+      lines.push('    section ');
     }
     for (const task of section.tasks) {
       lines.push(`        ${serializeTask(task)}`);
     }
-  }
+  });
   return lines.join('\n');
 }
 

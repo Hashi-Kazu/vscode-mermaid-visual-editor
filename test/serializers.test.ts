@@ -6,6 +6,7 @@ import {
   applyToDocument as flowApply,
 } from '../src/flowchartSerializer';
 import { ganttToCode, applyToDocument as ganttApply } from '../src/ganttSerializer';
+import { parseGantt } from '../src/ganttParser';
 import { GanttData } from '../src/types';
 
 const FC = 'flowchart TD\n    A[開始] --> B{条件}\n    B -->|はい| C[処理A]';
@@ -140,6 +141,45 @@ test('ganttToCode serializes status, id, afterId and duration', () => {
   const code = ganttToCode(data);
   assert.match(code, /A :done, t1, 2026-01-01, 3d/);
   assert.match(code, /B :t2, after t1, 2d/);
+});
+
+test('ganttToCode preserves a non-leading unnamed section across round-trip', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S1', tasks: [
+        { id: '', label: 'A', status: '', startDate: '2026-01-01', duration: 2 },
+      ] },
+      { name: '', tasks: [
+        { id: '', label: 'B', status: '', startDate: '2026-01-03', duration: 2 },
+      ] },
+    ],
+  };
+  const round = parseGantt(ganttToCode(data))!;
+  // Without the explicit boundary, B would merge into S1, collapsing to 1 section.
+  assert.equal(round.sections.length, 2);
+  assert.equal(round.sections[0].name, 'S1');
+  assert.equal(round.sections[1].name, '');
+  assert.equal(round.sections[1].tasks[0].label, 'B');
+});
+
+test('ganttToCode keeps leading pre-section tasks without a boundary marker', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: '', tasks: [
+        { id: '', label: 'A', status: '', startDate: '2026-01-01', duration: 2 },
+      ] },
+      { name: 'S1', tasks: [
+        { id: '', label: 'B', status: '', startDate: '2026-01-03', duration: 2 },
+      ] },
+    ],
+  };
+  const code = ganttToCode(data);
+  // The leading unnamed section emits no `section` line.
+  assert.doesNotMatch(code.split('section S1')[0], /section/);
+  const round = parseGantt(code)!;
+  assert.equal(round.sections.length, 2);
+  assert.equal(round.sections[0].name, '');
+  assert.equal(round.sections[0].tasks[0].label, 'A');
 });
 
 test('ganttApply preserves the mermaid fence on CRLF documents', () => {

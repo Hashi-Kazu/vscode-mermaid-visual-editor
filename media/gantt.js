@@ -15,6 +15,7 @@
   const MIN_PPD      = 7;
   const MAX_PPD      = 60;
   const DEF_PPD      = 24;
+  const HARD_MIN_PPD = 0.5;  // 全期間一望のための絶対下限（可読性の最低限）
   const RESIZE_W     = 8;
   const DRAG_THRESH  = 4;   // px before drag starts
   const PAD_DAYS     = 7;
@@ -102,6 +103,19 @@
 
   function dateToX(dateStr) {
     return diffDays(fmtDate(rangeStart), dateStr) * pxPerDay;
+  }
+
+  /* 全タスクの全期間がビューに収まる px/日（縮小下限の算出に使用）。
+     R-G10-07: ズームアウト下限を、全期間が一望できる倍率まで緩和する。 */
+  function fitFloorPpd() {
+    if (!ganttData) return MIN_PPD;
+    const container = document.getElementById('scroll-container');
+    const { min, max } = calcRange(ganttData);
+    const totalDays = Math.max(1, diffDays(fmtDate(min), fmtDate(max)));
+    const avail = (container ? container.clientWidth : 0) - LABEL_W;
+    if (avail <= 0) return MIN_PPD;
+    // 全期間が収まる px/日。MIN_PPD より小さくなる場合のみ下限を緩める。
+    return Math.max(HARD_MIN_PPD, Math.min(MIN_PPD, avail / totalDays));
   }
 
   /* ── DOM helper ── */
@@ -450,13 +464,10 @@
 
     dragState = null;
 
-    // 依存タスクの startDate を再解決し、変更がある場合は structuralEdit で送信
-    if (hasAnyAfterIds()) {
-      resolveAfterIds();
-      vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
-    } else {
-      vscode.postMessage({ type: 'editTask', si, ti, patch });
-    }
+    // 依存タスクの startDate を再解決し、常に全体 (structuralEdit) を送信。
+    // インデックス指定編集は並び替え直後にズレを生むため使わない（拡張側で全文置換）。
+    if (hasAnyAfterIds()) resolveAfterIds();
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     render();
   }
 
@@ -512,11 +523,12 @@
     finishEdit(true);
   }
 
-  /* ── Inline edit (bar dblclick) ── */
+  /* ── Bar dblclick → タスク編集GUI（名称・開始日・終了日） ── */
   function onBarDblClick(e) {
     e.preventDefault();
+    e.stopPropagation();
     const bar = e.currentTarget;
-    startTaskEdit(+bar.dataset.si, +bar.dataset.ti, bar);
+    showTaskEditPopup(+bar.dataset.si, +bar.dataset.ti, e.clientX, e.clientY);
   }
 
   function startTaskEdit(si, ti, bar) {
@@ -590,14 +602,12 @@
     pushUndo();
     if (type === 'task') {
       ganttData.sections[snap.si].tasks[snap.ti].label = newVal;
-      vscode.postMessage({ type: 'editTask', si: snap.si, ti: snap.ti, patch: { label: newVal } });
     } else if (type === 'section') {
       ganttData.sections[snap.si].name = newVal;
-      vscode.postMessage({ type: 'editSection', si: snap.si, name: newVal });
     } else if (type === 'title') {
       ganttData.title = newVal;
-      vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     }
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     render();
     document.getElementById('scroll-container').focus({ preventScroll: true });
   }
@@ -943,12 +953,8 @@
       const t = ganttData.sections[si].tasks[ti];
       t.startDate = newDate;
       t.duration  = newDur;
-      if (t.afterId) {
-        delete t.afterId; // R-G14-04: 依存関係を解除して絶対日付に変換
-        vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
-      } else {
-        vscode.postMessage({ type: 'editTask', si, ti, patch: { startDate: newDate, duration: newDur } });
-      }
+      if (t.afterId) delete t.afterId; // R-G14-04: 依存関係を解除して絶対日付に変換
+      vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
       render();
     }
 
@@ -956,6 +962,151 @@
     applyBtn.addEventListener('click', apply);
 
     [startInput, durInput].filter(Boolean).forEach(inp => {
+      inp.addEventListener('keydown', e => {
+        if (e.key === 'Enter')  { e.preventDefault(); apply(); }
+        if (e.key === 'Escape') { e.preventDefault(); removeDateEditPopup(); }
+        e.stopPropagation();
+      });
+    });
+
+    setTimeout(() => document.addEventListener('mousedown', onDateEditOutsideDown, true), 0);
+  }
+
+  /* ── Task edit popup (bar dblclick): 名称・開始日・終了日 ──
+     R-G15: バーのダブルクリックで名称・開始日・終了日を編集する。
+     終了日は内部の duration（日数）へ変換して保持・出力する（duration ベース）。 */
+  function showTaskEditPopup(si, ti, cx, cy) {
+    finishEdit(false);
+    removeDateEditPopup();
+
+    const task = ganttData.sections[si].tasks[ti];
+
+    const popup = el('div', 'date-edit-popup');
+
+    const header = el('div', 'dep-picker-header');
+    header.textContent = 'タスクを編集';
+    popup.appendChild(header);
+
+    // 名称行
+    const nameRow = el('div', 'date-edit-row');
+    const nameLabel = el('label', 'date-edit-label');
+    nameLabel.textContent = 'タスク名';
+    const nameInput = el('input');
+    nameInput.type = 'text';
+    nameInput.value = task.label;
+    nameInput.className = 'date-edit-input';
+    nameRow.appendChild(nameLabel);
+    nameRow.appendChild(nameInput);
+    popup.appendChild(nameRow);
+
+    // 開始日行
+    const startRow = el('div', 'date-edit-row');
+    const startLabel = el('label', 'date-edit-label');
+    startLabel.textContent = '開始日';
+    const startInput = el('input');
+    startInput.type = 'date';
+    startInput.value = task.startDate;
+    startInput.className = 'date-edit-input';
+    startRow.appendChild(startLabel);
+    startRow.appendChild(startInput);
+    popup.appendChild(startRow);
+
+    // 終了日行（マイルストーン以外）。終了日 = 開始日 + duration（包含的に最終日を表示）。
+    let endInput = null;
+    const isMilestone = task.status === 'milestone';
+    if (!isMilestone) {
+      const endRow = el('div', 'date-edit-row');
+      const endLabel = el('label', 'date-edit-label');
+      endLabel.textContent = '終了日';
+      endInput = el('input');
+      endInput.type = 'date';
+      // duration（バー幅日数）は開始日からの差分。終了日入力は最終日（開始 + duration - 1）を表示。
+      endInput.value = addDays(task.startDate, Math.max(0, (task.duration || 1) - 1));
+      endInput.className = 'date-edit-input';
+      endRow.appendChild(endLabel);
+      endRow.appendChild(endInput);
+      popup.appendChild(endRow);
+    }
+
+    const errMsg = el('div', 'date-edit-error');
+    errMsg.style.display = 'none';
+    popup.appendChild(errMsg);
+
+    const actions = el('div', 'date-edit-actions');
+    const cancelBtn = el('button', 'date-edit-btn date-edit-cancel');
+    cancelBtn.textContent = 'キャンセル';
+    cancelBtn.type = 'button';
+    const applyBtn = el('button', 'date-edit-btn date-edit-apply');
+    applyBtn.textContent = '適用';
+    applyBtn.type = 'button';
+    actions.appendChild(cancelBtn);
+    actions.appendChild(applyBtn);
+    popup.appendChild(actions);
+
+    popup.style.visibility = 'hidden';
+    document.body.appendChild(popup);
+
+    const pW = popup.offsetWidth  || 240;
+    const pH = popup.offsetHeight || 200;
+    let left = cx, top = cy;
+    if (left + pW > window.innerWidth)  left = cx - pW;
+    if (top  + pH > window.innerHeight) top  = cy - pH;
+    if (left < 4) left = 4;
+    if (top  < 4) top  = 4;
+    popup.style.left       = left + 'px';
+    popup.style.top        = top  + 'px';
+    popup.style.visibility = '';
+
+    nameInput.focus();
+    nameInput.select();
+
+    function apply() {
+      const newName = nameInput.value.trim();
+      if (!newName) {
+        errMsg.textContent = 'タスク名を入力してください';
+        errMsg.style.display = 'block';
+        return;
+      }
+      const newStart = startInput.value;
+      if (!newStart || !/^\d{4}-\d{2}-\d{2}$/.test(newStart)) {
+        errMsg.textContent = '有効な開始日（YYYY-MM-DD）を入力してください';
+        errMsg.style.display = 'block';
+        return;
+      }
+      let newDur = isMilestone ? 0 : (task.duration || 1);
+      if (!isMilestone && endInput) {
+        const newEnd = endInput.value;
+        if (!newEnd || !/^\d{4}-\d{2}-\d{2}$/.test(newEnd)) {
+          errMsg.textContent = '有効な終了日（YYYY-MM-DD）を入力してください';
+          errMsg.style.display = 'block';
+          return;
+        }
+        // 終了日（最終日・包含）→ duration へ変換。最小1日。
+        newDur = diffDays(newStart, newEnd) + 1;
+        if (newDur < 1) {
+          errMsg.textContent = '終了日は開始日以降にしてください';
+          errMsg.style.display = 'block';
+          return;
+        }
+      }
+      removeDateEditPopup();
+      pushUndo();
+
+      const t = ganttData.sections[si].tasks[ti];
+      t.label     = newName;
+      t.startDate = newStart;
+      t.duration  = newDur;
+      if (t.afterId) delete t.afterId; // 開始日を直接指定したら依存を解除（R-G11-05 同方針）
+
+      if (hasAnyAfterIds()) resolveAfterIds();
+      vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
+      render();
+    }
+
+    cancelBtn.addEventListener('click', removeDateEditPopup);
+    applyBtn.addEventListener('click', apply);
+
+    [nameInput, startInput, endInput].filter(Boolean).forEach(inp => {
       inp.addEventListener('keydown', e => {
         if (e.key === 'Enter')  { e.preventDefault(); apply(); }
         if (e.key === 'Escape') { e.preventDefault(); removeDateEditPopup(); }
@@ -974,7 +1125,7 @@
     const startDate = prev ? addDays(prev.startDate, prev.duration || 0) : fmtDate(new Date());
     const newTask = { id: '', label: '新しいタスク', status: '', startDate, duration: 7 };
     sec.tasks.splice(afterTi + 1, 0, newTask);
-    vscode.postMessage({ type: 'addTask', si, afterTi, task: newTask });
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     render();
     const newTi = afterTi + 1;
     const bar = document.querySelector(`.gantt-bar[data-si="${si}"][data-ti="${newTi}"]`);
@@ -988,7 +1139,7 @@
     const startDate = prev ? addDays(prev.startDate, prev.duration || 0) : fmtDate(new Date());
     const newTask = { id: '', label: 'マイルストーン', status: 'milestone', startDate, duration: 0 };
     sec.tasks.splice(afterTi + 1, 0, newTask);
-    vscode.postMessage({ type: 'addTask', si, afterTi, task: newTask });
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     render();
     const newTi = afterTi + 1;
     const row = rowIndex.find(r => r.type === 'task' && r.si === si && r.ti === newTi);
@@ -1007,7 +1158,7 @@
       duration: orig.duration,
     };
     sec.tasks.splice(ti + 1, 0, newTask);
-    vscode.postMessage({ type: 'addTask', si, afterTi: ti, task: newTask });
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     render();
     const newTi = ti + 1;
     if (orig.status === 'milestone') {
@@ -1022,7 +1173,7 @@
   function deleteTask(si, ti) {
     pushUndo();
     ganttData.sections[si].tasks.splice(ti, 1);
-    vscode.postMessage({ type: 'deleteTask', si, ti });
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     deleteTarget = null;
     render();
   }
@@ -1042,7 +1193,7 @@
   function addSection(name) {
     pushUndo();
     ganttData.sections.push({ name, tasks: [] });
-    vscode.postMessage({ type: 'addSection', name });
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     render();
   }
 
@@ -1269,7 +1420,7 @@
   function applyStatus(si, ti, status) {
     pushUndo();
     ganttData.sections[si].tasks[ti].status = status;
-    vscode.postMessage({ type: 'editTask', si, ti, patch: { status } });
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     render();
   }
 
@@ -1358,7 +1509,7 @@
     const mouseX = e.clientX - rect.left + container.scrollLeft - LABEL_W;
     const dayAtCursor = mouseX / pxPerDay;
     const factor = e.deltaY < 0 ? 1.15 : (1 / 1.15);
-    const newPPD = Math.max(MIN_PPD, Math.min(MAX_PPD, pxPerDay * factor));
+    const newPPD = Math.max(fitFloorPpd(), Math.min(MAX_PPD, pxPerDay * factor));
     if (Math.abs(newPPD - pxPerDay) < 0.01) return;
     const newScrollLeft = Math.round(dayAtCursor * newPPD) - (e.clientX - rect.left) + LABEL_W;
     pxPerDay = newPPD;
