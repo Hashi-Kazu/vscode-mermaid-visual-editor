@@ -30,7 +30,11 @@
 
   // Pan/zoom state
   const MIN_SCALE = 0.1;
-  const MAX_SCALE = 12; // 拡大上限（リセット時に小さな図でも十分大きく表示できるよう引き上げ）
+  const MAX_SCALE = 12; // 基本の拡大上限
+  const ZOOM_HEADROOM = 4; // リセット倍率からさらに拡大できる係数
+  // 直近の fitView で算出された表示倍率。小さな図ではこれが MAX_SCALE を超え、
+  // その場合でもリセット後にさらに拡大できるよう wheel の実効上限を引き上げる。
+  let fitScaleRef = 1;
   let tx = 0, ty = 0, scale = 1;
   let isPanning = false;
   let panStartX = 0, panStartY = 0, panStartTx = 0, panStartTy = 0;
@@ -761,7 +765,10 @@
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
     const factor = e.deltaY < 0 ? 1.1 : 0.9;
-    const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale * factor));
+    // リセット時の表示倍率を基準に、そこから ZOOM_HEADROOM 倍まで拡大余地を残す。
+    // 小さな図で fitScale が MAX_SCALE を超えても、リセット以上に拡大できる。
+    const effectiveMax = Math.max(MAX_SCALE, fitScaleRef * ZOOM_HEADROOM);
+    const newScale = Math.max(MIN_SCALE, Math.min(effectiveMax, scale * factor));
     tx = mx - (mx - tx) * (newScale / scale);
     ty = my - (my - ty) * (newScale / scale);
     scale = newScale;
@@ -825,6 +832,9 @@
       (wrap.height - margin * 2) / realH
     );
     const newScale = Math.max(MIN_SCALE, Math.min(fitScale, MAX_SCALE));
+    // リセット時の実表示倍率を記録（wheel の実効上限の基準にする）。
+    // 表示倍率自体はこれまで通り MAX_SCALE でクランプした newScale を使う。
+    fitScaleRef = newScale;
 
     // SVG 本体の中心をビュー中央へ合わせてセンタリングする
     tx = wrap.width  / 2 - newScale * (svgLeftLocal + realW / 2);
