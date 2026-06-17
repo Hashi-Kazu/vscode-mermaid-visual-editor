@@ -33,6 +33,7 @@
   let rowIndex     = [];
   let autoFitPpd   = true;
   let deleteTarget = null;  // { si, ti } — ti=-1 means section
+  let selected     = null;  // { si, ti } — クリックで確定した選択。ti=-1 はセクション選択
   const collapsedSections = new Set();
 
   /* ── Date helpers ── */
@@ -118,6 +119,22 @@
     return Math.max(HARD_MIN_PPD, Math.min(MIN_PPD, avail / totalDays));
   }
 
+  /* ── Selection helper ── */
+  function setSelected(si, ti) {
+    selected = { si, ti };
+    render();
+  }
+  // 選択の妥当性を保つ（行数変化後など）。範囲外なら null に。
+  function clampSelection() {
+    if (!selected) return;
+    const sec = ganttData && ganttData.sections[selected.si];
+    if (!sec) { selected = null; return; }
+    if (selected.ti >= 0 && selected.ti >= sec.tasks.length) {
+      // タスクが消えた場合はセクション選択へ降格
+      selected = { si: selected.si, ti: -1 };
+    }
+  }
+
   /* ── DOM helper ── */
   function el(tag, cls) {
     const e = document.createElement(tag);
@@ -149,9 +166,12 @@
     const tlW = Math.ceil(totalDays * pxPerDay);
     grid.style.setProperty('--cell-w', pxPerDay + 'px');
 
+    clampSelection();
     renderHeader(grid, min, max, tlW);
     ganttData.sections.forEach((sec, si) => {
-      if (sec.name) renderSection(grid, sec, si, tlW);
+      // 名前付き、または空セクションには行を描画する。
+      // 空セクションの行はクリック選択・D&Dドロップ先として機能する。
+      if (sec.name || sec.tasks.length === 0) renderSection(grid, sec, si, tlW);
       if (!collapsedSections.has(si)) {
         sec.tasks.forEach((task, ti) => renderTask(grid, task, si, ti, tlW));
       }
@@ -208,6 +228,15 @@
   function renderSection(grid, sec, si, tlW) {
     const labelCell = el('div', 'gantt-cell gantt-label section-label');
     labelCell.style.height = SECTION_H + 'px';
+    if (selected && selected.si === si && selected.ti === -1) {
+      labelCell.classList.add('row-selected');
+    }
+    // ラベル余白クリックでセクションを選択（子要素のクリックは各自で処理）
+    labelCell.addEventListener('click', e => {
+      if (e.target.closest('.reorder-handle') ||
+          e.target.closest('.collapse-toggle')) return;
+      setSelected(si, -1);
+    });
 
     const rHandle = el('span', 'reorder-handle');
     rHandle.textContent = '⠿';
@@ -231,7 +260,12 @@
     labelCell.appendChild(collapseBtn);
 
     const nameSpan = el('span', 'section-name');
-    nameSpan.textContent = sec.name;
+    if (sec.name) {
+      nameSpan.textContent = sec.name;
+    } else {
+      nameSpan.textContent = '(無名セクション)';
+      nameSpan.classList.add('section-name-empty');
+    }
     nameSpan.title = 'ダブルクリックで編集';
     nameSpan.addEventListener('dblclick', () => startSectionEdit(si, nameSpan));
     labelCell.appendChild(nameSpan);
@@ -244,7 +278,11 @@
     const tlCell = el('div', 'gantt-cell section-timeline');
     tlCell.style.width = tlW + 'px';
     tlCell.style.height = SECTION_H + 'px';
+    if (selected && selected.si === si && selected.ti === -1) {
+      tlCell.classList.add('row-selected');
+    }
     tlCell.addEventListener('mousedown', onPanStart);
+    tlCell.addEventListener('click', () => setSelected(si, -1));
     tlCell.addEventListener('contextmenu', e => { e.preventDefault(); showContextMenu(e, si, -1); });
     grid.appendChild(tlCell);
   }
@@ -252,6 +290,13 @@
   /* ── Task row ── */
   function renderTask(grid, task, si, ti, tlW) {
     const labelCell = el('div', 'gantt-cell gantt-label task-label');
+    if (selected && selected.si === si && selected.ti === ti) {
+      labelCell.classList.add('row-selected');
+    }
+    labelCell.addEventListener('click', e => {
+      if (e.target.closest('.reorder-handle')) return;
+      setSelected(si, ti);
+    });
 
     const rHandle = el('span', 'reorder-handle');
     rHandle.textContent = '⠿';
@@ -281,6 +326,10 @@
     tlCell.style.width = tlW + 'px';
     tlCell.dataset.si  = si;
     tlCell.dataset.ti  = ti;
+    if (selected && selected.si === si && selected.ti === ti) {
+      tlCell.classList.add('row-selected');
+    }
+    tlCell.addEventListener('click', () => setSelected(si, ti));
 
     const todayX = dateToX(fmtDate(new Date()));
     if (todayX >= 0 && todayX <= tlW) {
@@ -1125,9 +1174,10 @@
     const startDate = prev ? addDays(prev.startDate, prev.duration || 0) : fmtDate(new Date());
     const newTask = { id: '', label: '新しいタスク', status: '', startDate, duration: 7 };
     sec.tasks.splice(afterTi + 1, 0, newTask);
+    const newTi = afterTi + 1;
+    selected = { si, ti: newTi };
     vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     render();
-    const newTi = afterTi + 1;
     const bar = document.querySelector(`.gantt-bar[data-si="${si}"][data-ti="${newTi}"]`);
     if (bar) startTaskEdit(si, newTi, bar);
   }
@@ -1190,11 +1240,26 @@
     render();
   }
 
-  function addSection(name) {
+  function addSection(name, insertAt) {
     pushUndo();
-    ganttData.sections.push({ name, tasks: [] });
+    const at = (typeof insertAt === 'number')
+      ? Math.max(0, Math.min(insertAt, ganttData.sections.length))
+      : ganttData.sections.length;
+    ganttData.sections.splice(at, 0, { name, tasks: [] });
+    // 折りたたみインデックスは挿入位置以降が1つずれるので再構築
+    shiftCollapsedAfterInsert(at);
+    selected = { si: at, ti: -1 };
     vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     render();
+  }
+
+  // セクション挿入時に collapsedSections のインデックスを補正
+  function shiftCollapsedAfterInsert(at) {
+    if (collapsedSections.size === 0) return;
+    const shifted = new Set();
+    collapsedSections.forEach(i => shifted.add(i >= at ? i + 1 : i));
+    collapsedSections.clear();
+    shifted.forEach(i => collapsedSections.add(i));
   }
 
   /* ── Task reorder (context menu) ── */
@@ -1203,9 +1268,12 @@
     if (ti > 0) {
       const tasks = ganttData.sections[si].tasks;
       [tasks[ti-1], tasks[ti]] = [tasks[ti], tasks[ti-1]];
+      selected = { si, ti: ti - 1 };
     } else if (si > 0) {
       const task = ganttData.sections[si].tasks.splice(ti, 1)[0];
       ganttData.sections[si-1].tasks.push(task);
+      unlinkDependencyOnSectionMove(task);  // 別セクションへ移動(B-8)
+      selected = { si: si - 1, ti: ganttData.sections[si-1].tasks.length - 1 };
     }
     vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     render();
@@ -1216,9 +1284,12 @@
     const sec = ganttData.sections[si];
     if (ti < sec.tasks.length - 1) {
       [sec.tasks[ti], sec.tasks[ti+1]] = [sec.tasks[ti+1], sec.tasks[ti]];
+      selected = { si, ti: ti + 1 };
     } else if (si < ganttData.sections.length - 1) {
       const task = sec.tasks.splice(ti, 1)[0];
       ganttData.sections[si+1].tasks.unshift(task);
+      unlinkDependencyOnSectionMove(task);  // 別セクションへ移動(B-8)
+      selected = { si: si + 1, ti: 0 };
     }
     vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     render();
@@ -1284,15 +1355,30 @@
   }
 
   function findDropTarget(clientY) {
-    const tasks = rowIndex.filter(r => r.type === 'task');
-    for (const row of tasks) {
+    // タスク行に加え、タスク行を表示していないセクション行（空セクション、または
+    // 折りたたみセクション）もドロップ先候補に含める。これにより空セクションへ
+    // タスクを移動でき(要3)、折りたたみセクションへも入れられる(B-10)。
+    const isSectionDrop = r =>
+      r.type === 'section' &&
+      (ganttData.sections[r.si].tasks.length === 0 || collapsedSections.has(r.si));
+    const rows = rowIndex.filter(r => r.type === 'task' || isSectionDrop(r));
+    for (const row of rows) {
       const rect = row.el.getBoundingClientRect();
       if (clientY < rect.top + rect.height / 2) {
+        if (row.type === 'section') {
+          // セクション行の上端 → そのセクション末尾へ挿入（折りたたみは展開）
+          const ti = ganttData.sections[row.si].tasks.length;
+          return { si: row.si, ti, position: 'before', el: row.el, sectionDrop: true };
+        }
         return { si: row.si, ti: row.ti, position: 'before', el: row.el };
       }
     }
-    if (tasks.length > 0) {
-      const last = tasks[tasks.length - 1];
+    if (rows.length > 0) {
+      const last = rows[rows.length - 1];
+      if (last.type === 'section') {
+        const ti = ganttData.sections[last.si].tasks.length;
+        return { si: last.si, ti, position: 'before', el: last.el, sectionDrop: true };
+      }
       return { si: last.si, ti: last.ti, position: 'after', el: last.el };
     }
     return null;
@@ -1324,8 +1410,21 @@
     const sec = ganttData.sections[target.si];
     insertTi = Math.max(0, Math.min(insertTi, sec.tasks.length));
     sec.tasks.splice(insertTi, 0, task);
+    // 折りたたみセクションへドロップした場合は展開して結果を見せる(B-10)。
+    if (target.sectionDrop) collapsedSections.delete(target.si);
+    // 別セクションへ移したら依存(after)を解除し、バードラッグ等と整合させる(B-8)。
+    if (fromSi !== target.si) unlinkDependencyOnSectionMove(task);
+    selected = { si: target.si, ti: insertTi };
     vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     render();
+  }
+
+  // タスクが別セクションへ移動したときの依存(after)整合処理。
+  // 自身の afterId は解除し（移動側を絶対日付に固定）、自身に依存している
+  // タスクの開始日を再解決して矢印と日付のズレを防ぐ。
+  function unlinkDependencyOnSectionMove(task) {
+    if (task.afterId) delete task.afterId;
+    if (hasAnyAfterIds()) resolveAfterIds();
   }
 
   function applySectionReorder(fromSi, target) {
@@ -1521,13 +1620,26 @@
   /* ── Toolbar buttons ── */
   document.getElementById('btn-add-task').addEventListener('click', () => {
     if (!ganttData || !ganttData.sections.length) return;
-    const si = 0;
-    addTask(si, ganttData.sections[si].tasks.length - 1);
+    // 選択中セクションに追加。タスクが選択中ならその直後、なければ末尾。
+    // 選択が無ければ従来どおり先頭セクション末尾。
+    let si = 0;
+    let afterTi = -1;
+    if (selected && ganttData.sections[selected.si]) {
+      si = selected.si;
+      afterTi = selected.ti >= 0 ? selected.ti : ganttData.sections[si].tasks.length - 1;
+    } else {
+      afterTi = ganttData.sections[si].tasks.length - 1;
+    }
+    addTask(si, afterTi);
   });
 
   document.getElementById('btn-add-section').addEventListener('click', () => {
     if (!ganttData) return;
-    addSection('新しいセクション');
+    // 選択中セクションの直後に挿入。選択が無ければ末尾。
+    const insertAt = (selected && ganttData.sections[selected.si])
+      ? selected.si + 1
+      : ganttData.sections.length;
+    addSection('新しいセクション', insertAt);
   });
 
   document.getElementById('btn-undo').addEventListener('click', () => {

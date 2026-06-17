@@ -181,6 +181,20 @@ body {
 }
 .section-name { cursor: pointer; }
 .section-name:hover { text-decoration: underline; }
+.section-name-empty {
+  font-style: italic;
+  opacity: 0.6;
+  text-transform: none;
+}
+
+/* ── Selected row highlight (click to select) ── */
+.row-selected {
+  background: color-mix(in srgb, var(--vscode-list-activeSelectionBackground, var(--vscode-focusBorder)) 25%, transparent);
+  box-shadow: inset 2px 0 0 0 var(--vscode-focusBorder);
+}
+.section-label.row-selected {
+  background: color-mix(in srgb, var(--vscode-list-activeSelectionBackground, var(--vscode-focusBorder)) 35%, var(--vscode-editor-background));
+}
 
 .section-timeline {
   height: 28px;

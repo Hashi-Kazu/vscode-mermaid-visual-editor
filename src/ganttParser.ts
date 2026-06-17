@@ -20,7 +20,12 @@ function parseGanttCode(code: string): GanttData | null {
   const data: GanttData = { title: '', dateFormat: 'YYYY-MM-DD', sections: [] };
   const taskById = new Map<string, string>(); // id → endDate
 
+  // The leading section is an implicit placeholder for any pre-`section` tasks.
+  // It is only kept if tasks actually land in it (see filter below). Sections
+  // introduced by an explicit `section` line are always preserved, even when
+  // empty, so user-created empty sections survive the round-trip.
   let current: GanttSection = { name: '', tasks: [] };
+  const leadingPlaceholder: GanttSection = current;
   data.sections.push(current);
 
   for (let i = ganttIdx + 1; i < lines.length; i++) {
@@ -51,8 +56,12 @@ function parseGanttCode(code: string): GanttData | null {
     }
   }
 
-  // Remove placeholder empty section if nothing landed there
-  data.sections = data.sections.filter(s => s.tasks.length > 0 || s.name !== '');
+  // Drop only the implicit leading placeholder when nothing landed in it.
+  // Explicit sections (named or unnamed) are always preserved so that
+  // user-created empty sections survive a save/parse round-trip.
+  if (leadingPlaceholder.tasks.length === 0) {
+    data.sections = data.sections.filter(s => s !== leadingPlaceholder);
+  }
   if (data.sections.length === 0) data.sections = [{ name: '', tasks: [] }];
   return data;
 }

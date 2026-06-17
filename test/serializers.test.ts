@@ -182,6 +182,48 @@ test('ganttToCode keeps leading pre-section tasks without a boundary marker', ()
   assert.equal(round.sections[0].tasks[0].label, 'A');
 });
 
+test('parseGantt preserves a named empty section (no tasks)', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n\n    section A\n        T1 :2026-01-01, 2d\n\n    section Empty\n';
+  const data = parseGantt(code)!;
+  assert.equal(data.sections.length, 2);
+  assert.equal(data.sections[1].name, 'Empty');
+  assert.equal(data.sections[1].tasks.length, 0);
+});
+
+test('parseGantt preserves an explicit unnamed empty section', () => {
+  // `section ` (unnamed) with no following tasks must survive — it is an
+  // explicit user-created section, not the implicit leading placeholder.
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n\n    section A\n        T1 :2026-01-01, 2d\n\n    section \n';
+  const data = parseGantt(code)!;
+  assert.equal(data.sections.length, 2);
+  assert.equal(data.sections[1].name, '');
+  assert.equal(data.sections[1].tasks.length, 0);
+});
+
+test('parseGantt drops only the implicit leading placeholder when empty', () => {
+  // No pre-section tasks → the leading placeholder is removed.
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n\n    section A\n        T1 :2026-01-01, 2d\n';
+  const data = parseGantt(code)!;
+  assert.equal(data.sections.length, 1);
+  assert.equal(data.sections[0].name, 'A');
+});
+
+test('empty sections survive a full serialize -> parse round-trip', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'A', tasks: [{ id: '', label: 'T1', status: '', startDate: '2026-01-01', duration: 2 }] },
+      { name: 'Named empty', tasks: [] },
+      { name: '', tasks: [] },
+    ],
+  };
+  const round = parseGantt(ganttToCode(data))!;
+  assert.equal(round.sections.length, 3);
+  assert.equal(round.sections[1].name, 'Named empty');
+  assert.equal(round.sections[1].tasks.length, 0);
+  assert.equal(round.sections[2].name, '');
+  assert.equal(round.sections[2].tasks.length, 0);
+});
+
 test('ganttApply preserves the mermaid fence on CRLF documents', () => {
   const doc = '```mermaid\r\ngantt\r\n    title X\r\n```\r\n';
   const out = ganttApply(doc, 'project.md', 'gantt\n    title Y');
