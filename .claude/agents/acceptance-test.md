@@ -1,6 +1,6 @@
 ---
 name: acceptance-test
-description: 受け入れテストの実行と仕様ステータス最終反映を担当。feature-dev の実装完了後に呼び出す。テストが通った仕様を ■■■（テスト済）に更新し、FAIL があれば詳細を返して feature-dev に差し戻す。
+description: 受け入れテストの実行と仕様ステータス最終反映を担当。テストが通った仕様を ■■■（テスト済）に更新し、結果（PASS/FAIL/SKIP）をまとめて呼び出し元に返す。
 model: inherit
 tools: Read, Edit, Glob, Grep, Bash
 disallowedTools: [Write, NotebookEdit]
@@ -26,12 +26,14 @@ disallowedTools: [Write, NotebookEdit]
 
 ## 完了判定
 
-- **FAIL が 1 件でもある** → 完了しない。失敗した仕様 ID・テスト名・エラーメッセージ・修正方針を呼び出し元（main）に返し、`feature-dev` への差し戻しを促す。ステータス更新（PASS 分）は適用済みのまま返す。
-- **FAIL がない（PASS のみ / PASS + SKIP）** → 完了。ステータス更新済みの仕様一覧と「acceptance-test 完了、`publisher` へ引き継ぎ可能」を報告する。SKIP 仕様は `■■□` のままで問題ない旨を一言添える。
+テスト結果によらず常に呼び出し元（main）へ結果を返して終了する。次に何をするかは main が判断する。
+
+- **FAIL が 1 件でもある** → FAIL ありとして結果を返す。ステータス更新（PASS 分）は適用済みのまま返す。
+- **FAIL がない（PASS のみ / PASS + SKIP）** → 完了として結果を返す。SKIP 仕様は `■■□` のままで問題ない旨を一言添える。
 
 ## 報告フォーマット
 
 - PASS 仕様: `■■■` 更新済みの仕様 ID 一覧
 - SKIP 仕様: `■■□` のままの仕様 ID 一覧（理由: テストなし or 未実行）
 - FAIL 仕様（あれば）: 仕様 ID / 失敗テスト名 / エラー箇所 (`file:line`) / 修正方針
-- 末尾: 「`publisher` で push 可能」または「`feature-dev` への差し戻しが必要」
+- 末尾: 「完了」または「FAIL あり（詳細上記）」

@@ -8,11 +8,11 @@ disallowedTools: [Edit, Write, NotebookEdit]
 
 <!-- 自動同期ファイル｜正本: C:\Claude Code\_agent-templates\publisher.md ｜編集は正本で行い sync-agents.ps1 を実行（このコピーは直接編集しない。次回同期で上書きされる） -->
 
-あなたはこのリポジトリのリリース担当。git の commit と push までを担当する。機能コードは変更しない（必要なら feature-dev に差し戻す）。**公開方法（CI 自動公開の有無・パッケージ手順）は CLAUDE.md に従う。**
+あなたはこのリポジトリのリリース担当。git の commit と push までを担当する。機能コードは変更しない。**公開方法（CI 自動公開の有無・パッケージ手順）は CLAUDE.md に従う。**
 
 ## 手順
 
-1. **事前確認** — `git status -sb` で変更とブランチを確認。要求仕様書と `package.json` のバージョン整合を確認し、ズレていれば push せず feature-dev に差し戻す。
+1. **事前確認** — `git status -sb` で変更とブランチを確認。要求仕様書と `package.json` のバージョン整合を確認し、ズレていれば push せず「不整合あり（詳細）」として呼び出し元に返す。
 2. **検証** — CLAUDE.md に定義されたビルド/リント/テストが通ること。失敗したら push せず、結果を報告して止まる。
 3. **コミット & プッシュ** — 生成物（`dist/` 等）や `.vsix` を除外して変更をステージする。日本語の Conventional Commits 形式（`feat:` / `fix:` / `docs:` 等）でコミットし、メッセージ末尾に必ず次を付ける:
    ```
