@@ -2,7 +2,7 @@
   "name": "vscode-mermaid-visual-editor",
   "displayName": "Markdown マーメイドビジュアルエディタ",
   "description": "Mermaid記法の図をリアルタイムプレビュー・編集するVS Code拡張機能",
-  "version": "2.6.1",
+  "version": "2.6.2",
   "publisher": "Hashi-Kazu",
   "repository": {
     "type": "git",
@@ -102,7 +102,7 @@
     "vscode:prepublish": "node esbuild.js --production",
     "build": "node esbuild.js",
     "watch": "node esbuild.js --watch",
-    "test": "esbuild test/serializers.test.ts test/parsers.test.ts test/conflictDetection.test.ts --bundle --platform=node --format=cjs --external:vscode --outdir=dist-test && node --test dist-test/serializers.test.js dist-test/parsers.test.js dist-test/conflictDetection.test.js",
+    "test": "esbuild test/serializers.test.ts test/parsers.test.ts test/conflictDetection.test.ts test/svgExport.test.ts test/backupNaming.test.ts --bundle --platform=node --format=cjs --external:vscode --outdir=dist-test && node --test dist-test/serializers.test.js dist-test/parsers.test.js dist-test/conflictDetection.test.js dist-test/svgExport.test.js dist-test/backupNaming.test.js",
     "package": "npx vsce package"
   },
   "devDependencies": {

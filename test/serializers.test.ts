@@ -519,3 +519,72 @@ test('ganttApply updates only the gantt mermaid block and leaves other content',
   assert.doesNotMatch(out, /title Old/);
   assert.match(out, /Some text after\./);
 });
+
+// ── lazy-separation: subgraph / comment preservation (R-FP-02 / R-FP-03) ───────
+
+test('editNodeLabel preserves subgraph/end wrappers and comments while separating the node', () => {
+  const code = 'flowchart TD\n  %% a comment\n  subgraph G\n    A[古い] --> B\n  end';
+  const out = editNodeLabel(code, 'A', '新しい');
+  // The comment and subgraph structure must survive untouched.
+  assert.match(out, /^\s*%% a comment$/m);
+  assert.match(out, /^\s*subgraph G$/m);
+  assert.match(out, /^\s*end$/m);
+  // The edge is reduced to an id-only reference; A is declared exactly once.
+  assert.match(out, /^\s*A --> B$/m);
+  const declCount = out.split('\n').filter(l => l.trim() === 'A[新しい]').length;
+  assert.equal(declCount, 1);
+  assert.doesNotMatch(out, /A\[古い\]/);
+});
+
+test('changeNodeShape preserves comments and only rewrites the target node', () => {
+  const code = 'flowchart TD\n  %% keep me\n  A[開始] --> B\n  B --> C';
+  const out = changeNodeShape(code, 'A', 'stadium');
+  assert.match(out, /^\s*%% keep me$/m);
+  assert.match(out, /^\s*A\(\[開始\]\)$/m);   // separated stadium declaration
+  assert.match(out, /^\s*A --> B$/m);          // edge id-only
+  assert.match(out, /^\s*B --> C$/m);          // unrelated edge untouched
+});
+
+// ── addEdge keeps id-only form (R-FP-01) ──────────────────────────────────────
+
+test('addEdge does not inline node bracket definitions (id reference only)', () => {
+  const out = addEdge('flowchart TD\n    A[開始] --> B[条件]', 'A', 'B');
+  // The appended line references ids only, with no bracket re-definition.
+  assert.match(out, /^\s*A --> B$/m);
+  assert.doesNotMatch(out, /A\[開始\] --> B\[条件\]\s*$\n\s*A\[/m);
+});
+
+// ── deleteNode robustness ─────────────────────────────────────────────────────
+
+test('deleteNode removes the node and its edges but leaves unrelated nodes/edges', () => {
+  const out = deleteNode('flowchart TD\n    A --> B\n    C --> D', 'A');
+  assert.doesNotMatch(out, /^\s*A\b/m);
+  assert.doesNotMatch(out, /--> A\b/m);
+  assert.match(out, /^\s*C --> D$/m);   // unrelated edge survives
+});
+
+test('deleteNode removes only edges touching the target among parallels', () => {
+  const out = deleteNode('flowchart TD\n    A --> B\n    B --> C\n    A --> C', 'A');
+  // Edges with A on either side are gone; B --> C remains.
+  assert.doesNotMatch(out, /A/);
+  assert.match(out, /^\s*B --> C$/m);
+});
+
+// ── setDirection keyword preservation (R-F05-02) ──────────────────────────────
+
+test('setDirection preserves the graph keyword and only swaps the direction token', () => {
+  const out = setDirection('graph TD\n    A --> B', 'BT');
+  assert.equal(out.split('\n')[0], 'graph BT');
+  assert.match(out, /A --> B/);
+});
+
+// ── editEdgeLabel on parallel edges targets the indexed one ────────────────────
+
+test('editEdgeLabel updates only the indexed edge among parallels', () => {
+  const code = 'flowchart TD\n    A --> B\n    A --> B';
+  const out = editEdgeLabel(code, 'A', 'B', 1, 'second');
+  const lines = out.split('\n').filter(l => /A (-->|-->\|)/.test(l.trim()));
+  // Exactly one of the two parallel A→B edges carries the new label.
+  const labeled = lines.filter(l => /\|second\|/.test(l));
+  assert.equal(labeled.length, 1);
+});

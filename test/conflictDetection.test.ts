@@ -49,6 +49,24 @@ test('normalizeText converts CRLF and lone CR to LF', () => {
   assert.equal(normalizeText('a\r\nb\rc\nd'), 'a\nb\nc\nd');
 });
 
+test('lone CR base vs LF current with same content is not a conflict', () => {
+  const base = '```mermaid\rgantt\rtitle X\r```\r';
+  const current = '```mermaid\ngantt\ntitle X\n```\n';
+  assert.equal(detectConflict(base, current, '```mermaid\ngantt\ntitle Z\n```\n'), false);
+});
+
+test('whitespace/content difference beyond newline style is a real conflict', () => {
+  const base = '```mermaid\ngantt\n  title X\n```\n';
+  // trailing-space added by another editor changes content meaningfully
+  const current = '```mermaid\ngantt\n  title X CHANGED\n```\n';
+  const outgoing = '```mermaid\ngantt\n  title Y\n```\n';
+  assert.equal(detectConflict(base, current, outgoing), true);
+});
+
+test('normalizeText leaves an already-LF string unchanged', () => {
+  assert.equal(normalizeText('a\nb\nc'), 'a\nb\nc');
+});
+
 test('isOperating window: external edit during operation is detected at write time', () => {
   // Simulates the gap fix: base is the snapshot the view was built from; while
   // isOperating suppressed the sync, the live document received an external

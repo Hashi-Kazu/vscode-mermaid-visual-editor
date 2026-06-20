@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseFlowchart } from '../src/flowchartParser';
-import { parseGantt } from '../src/ganttParser';
+import { parseFlowchart, getFlowchartBlock } from '../src/flowchartParser';
+import { parseGantt, parseDate, fmt } from '../src/ganttParser';
 
 test('parseFlowchart detects keyword, direction and node shapes', () => {
   const code = '```mermaid\nflowchart LR\n    A[四角] --> B{ひし}\n    C([スタジアム])\n    D((円))\n    E(丸)\n```';
@@ -192,4 +192,104 @@ test('parseFlowchart parses dotted-no-arrow edge (A -.- B)', () => {
   assert.equal(data.edges[0].style, 'dotted-no-arrow');
   assert.equal(data.edges[0].from, 'A');
   assert.equal(data.edges[0].to, 'B');
+});
+
+// ── duration unit conversion (R-G03-04 / R-G15-03) ────────────────────────────
+
+test('parseGantt converts week duration (Nw) into days', () => {
+  const data = parseGantt('gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T1 :t1, 2026-01-01, 2w\n')!;
+  // 2 weeks = 14 days
+  assert.equal(data.sections[0].tasks[0].duration, 14);
+});
+
+test('parseGantt converts hour duration (Nh) into ceil(N/24) days, min 1', () => {
+  const d36 = parseGantt('gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T1 :t1, 2026-01-01, 36h\n')!;
+  assert.equal(d36.sections[0].tasks[0].duration, 2); // ceil(36/24)=2
+  const d6 = parseGantt('gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T1 :t1, 2026-01-01, 6h\n')!;
+  assert.equal(d6.sections[0].tasks[0].duration, 1); // ceil(6/24)=1 (min 1)
+});
+
+test('parseGantt derives duration from an explicit end date (start, endDate)', () => {
+  // start 2026-01-01, end 2026-01-05 → diffDays = 4
+  const data = parseGantt('gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T1 :t1, 2026-01-01, 2026-01-05\n')!;
+  assert.equal(data.sections[0].tasks[0].duration, 4);
+});
+
+// ── after-dependency resolution (R-G11-04) ────────────────────────────────────
+
+test('parseGantt resolves after <id> to the predecessor end date and keeps afterId', () => {
+  // T1: 2026-01-01 + 3d → ends 2026-01-04. T2 :after t1 → starts 2026-01-04.
+  const data = parseGantt('gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T1 :t1, 2026-01-01, 3d\n        T2 :after t1, 2d\n')!;
+  const t2 = data.sections[0].tasks[1];
+  assert.equal(t2.startDate, '2026-01-04');
+  assert.equal(t2.afterId, 't1');
+});
+
+test('parseGantt leaves afterId unset for tasks with an absolute start date', () => {
+  const data = parseGantt('gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T1 :t1, 2026-01-01, 3d\n')!;
+  assert.equal(data.sections[0].tasks[0].afterId, undefined);
+});
+
+// ── date helpers (parseDate / fmt) ────────────────────────────────────────────
+
+test('parseDate and fmt round-trip a date string', () => {
+  assert.equal(fmt(parseDate('2026-03-09')), '2026-03-09');
+});
+
+test('fmt zero-pads month and day', () => {
+  assert.equal(fmt(parseDate('2026-1-2')), '2026-01-02');
+});
+
+// ── flowchart block detection (R-F01-01) ──────────────────────────────────────
+
+test('getFlowchartBlock locates the flowchart fence among markdown content', () => {
+  const text = '# Title\n\n```mermaid\nflowchart TD\n  A-->B\n```\n';
+  const blk = getFlowchartBlock(text)!;
+  assert.ok(blk);
+  // The slice must be exactly the fenced block.
+  assert.match(text.slice(blk.start, blk.end), /^```mermaid[\s\S]*```$/);
+  assert.match(text.slice(blk.start, blk.end), /flowchart TD/);
+});
+
+test('getFlowchartBlock returns null when no flowchart block exists', () => {
+  const text = '# Title\n\n```mermaid\ngantt\n  title X\n```\n';
+  assert.equal(getFlowchartBlock(text), null);
+});
+
+test('getFlowchartBlock skips a gantt block and finds a later flowchart block', () => {
+  const text = '```mermaid\ngantt\n  title G\n```\n\n```mermaid\ngraph LR\n  A --> B\n```\n';
+  const blk = getFlowchartBlock(text)!;
+  assert.ok(blk);
+  assert.match(text.slice(blk.start, blk.end), /graph LR/);
+});
+
+// ── A -- label --> B edge form ────────────────────────────────────────────────
+
+test('parseFlowchart parses the "A -- label --> B" spaced-label form', () => {
+  const data = parseFlowchart('flowchart TD\n    A -- yes --> B')!;
+  assert.equal(data.edges.length, 1);
+  assert.equal(data.edges[0].label, 'yes');
+  assert.equal(data.edges[0].style, 'solid-arrow');
+  assert.equal(data.edges[0].from, 'A');
+  assert.equal(data.edges[0].to, 'B');
+});
+
+// ── subgraph / comment handling in parse (R-FP-03) ────────────────────────────
+
+test('parseFlowchart ignores subgraph/end wrappers and comments while keeping inner edges', () => {
+  const data = parseFlowchart('flowchart TD\n  %% a comment\n  subgraph G\n    A[開始] --> B\n  end')!;
+  assert.equal(data.edges.length, 1);
+  assert.equal(data.edges[0].from, 'A');
+  assert.equal(data.edges[0].to, 'B');
+  const a = data.nodes.find(n => n.id === 'A')!;
+  assert.equal(a.label, '開始');
+});
+
+// ── parallel-edge indexing ────────────────────────────────────────────────────
+
+test('parseFlowchart assigns distinct ids to parallel edges between the same nodes', () => {
+  const data = parseFlowchart('flowchart TD\n    A --> B\n    A --> B')!;
+  assert.equal(data.edges.length, 2);
+  assert.equal(data.edges[0].id, 'A::B::0');
+  assert.equal(data.edges[1].id, 'A::B::1');
 });

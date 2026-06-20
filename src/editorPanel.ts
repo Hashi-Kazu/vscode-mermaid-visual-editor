@@ -10,6 +10,8 @@ import {
   applyToDocument as flowApply,
 } from './flowchartSerializer';
 import { GanttData, GanttTask, WebToExt, FlowWebToExt } from './types';
+import { exportDefaultPath, exportEncoding } from './svgExport';
+import { backupTimestamp, backupFileName } from './backupNaming';
 
 export type DiagramType = 'gantt' | 'flowchart';
 
@@ -344,12 +346,11 @@ export class EditorPanel {
   }
 
   private async _handleExport(format: 'svg' | 'png', data: string): Promise<void> {
-    const baseName = this._document.uri.fsPath.replace(/\.[^.]+$/, '');
-    const defaultUri = vscode.Uri.file(`${baseName}.${format}`);
+    const defaultUri = vscode.Uri.file(exportDefaultPath(this._document.uri.fsPath, format));
     const filters = format === 'svg' ? { 'SVG Image': ['svg'] } : { 'PNG Image': ['png'] };
     const uri = await vscode.window.showSaveDialog({ defaultUri, filters });
     if (!uri) return;
-    const bytes = format === 'svg' ? Buffer.from(data, 'utf-8') : Buffer.from(data, 'base64');
+    const bytes = Buffer.from(data, exportEncoding(format));
     await vscode.workspace.fs.writeFile(uri, bytes);
     vscode.window.showInformationMessage(`エクスポートしました: ${uri.fsPath}`);
   }
@@ -529,15 +530,9 @@ export class EditorPanel {
   /** Write a timestamped backup beside the document so neither side is lost. */
   private async _backupConflict(which: 'mine' | 'remote', content: string): Promise<void> {
     try {
-      const stamp = new Date()
-        .toISOString()
-        .replace(/[:.]/g, '-')
-        .replace('T', '_')
-        .slice(0, 19);
+      const stamp = backupTimestamp(new Date());
       const dir = path.dirname(this._document.uri.fsPath);
-      const ext = path.extname(this._document.uri.fsPath);
-      const base = path.basename(this._document.uri.fsPath, ext);
-      const backupName = `${base}.conflict-${which}-${stamp}${ext}`;
+      const backupName = backupFileName(this._document.uri.fsPath, which, stamp);
       const backupUri = vscode.Uri.file(path.join(dir, backupName));
       await vscode.workspace.fs.writeFile(backupUri, Buffer.from(content, 'utf8'));
     } catch {
