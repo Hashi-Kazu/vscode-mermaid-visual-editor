@@ -13,7 +13,13 @@ export interface GanttSection {
 export interface GanttTask {
   id: string;
   label: string;
-  status: 'done' | 'active' | 'crit' | 'milestone' | '';
+  /** Primary status keyword: done / active / milestone / '' (unset).
+   *  'crit' has been extracted to the separate `crit` flag so that
+   *  critical path can be combined with done/active. */
+  status: 'done' | 'active' | 'milestone' | '';
+  /** Critical-path flag — maps to the Mermaid `crit` keyword.
+   *  Independent of `status` so that e.g. done+crit is representable. */
+  crit?: boolean;
   startDate: string; // YYYY-MM-DD
   duration: number;  // days
   afterId?: string;  // dependency: `after <id>`

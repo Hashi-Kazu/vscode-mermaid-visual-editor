@@ -1,6 +1,9 @@
 import { GanttData, GanttSection, GanttTask } from './types';
 
-const STATUSES = ['done', 'active', 'crit', 'milestone'] as const;
+/** Keywords that map to GanttTask.status (single-select). */
+const STATUS_WORDS = ['done', 'active', 'milestone'] as const;
+/** `crit` is extracted as a separate boolean flag (combinable with status). */
+const CRIT_WORD = 'crit';
 
 export function parseGantt(text: string): GanttData | null {
   // Support both raw .mmd and ```mermaid blocks inside .md
@@ -40,7 +43,9 @@ function parseGanttCode(code: string): GanttData | null {
         t.startsWith('todayMarker') ||
         t.startsWith('inclusiveEndDates')) { continue; }
 
-    if (t.startsWith('section')) {
+    // Match `section` followed by a space or end-of-line (prevents
+    // accidentally treating `sectionFoo` task labels as section headers).
+    if (t === 'section' || t.startsWith('section ')) {
       const name = t.slice(7).trim();
       current = { name, tasks: [] };
       data.sections.push(current);
@@ -78,13 +83,25 @@ function parseTaskLine(line: string, taskById: Map<string, string>): GanttTask |
   const isDur     = (s: string) => /^\d+[dwhmsDWHMS]$/.test(s);
 
   let status: GanttTask['status'] = '';
+  let crit = false;
   let id = '';
   let startStr = '';
   let duration = 7;
   let idx = 0;
 
-  if (parts[idx] && (STATUSES as readonly string[]).includes(parts[idx])) {
-    status = parts[idx++] as GanttTask['status'];
+  // Consume all leading keyword tokens (crit / done / active / milestone).
+  // Mermaid allows combinations such as `crit, done` or `active, crit`.
+  while (parts[idx]) {
+    const p = parts[idx];
+    if (p === CRIT_WORD) {
+      crit = true;
+      idx++;
+    } else if ((STATUS_WORDS as readonly string[]).includes(p)) {
+      status = p as GanttTask['status'];
+      idx++;
+    } else {
+      break;
+    }
   }
 
   if (parts[idx] && !isDateStr(parts[idx]) && !isAfter(parts[idx]) && !isDur(parts[idx])) {
@@ -108,7 +125,12 @@ function parseTaskLine(line: string, taskById: Map<string, string>): GanttTask |
 
   const startDate = resolveStart(startStr, taskById);
   const afterId = startStr.startsWith('after ') ? startStr.slice(6).trim() : undefined;
-  return { id, label, status, startDate, duration, ...(afterId ? { afterId } : {}) };
+  return {
+    id, label, status,
+    ...(crit ? { crit: true } : {}),
+    startDate, duration,
+    ...(afterId ? { afterId } : {}),
+  };
 }
 
 function resolveStart(s: string, taskById: Map<string, string>): string {

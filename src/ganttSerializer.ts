@@ -27,6 +27,8 @@ export function ganttToCode(data: GanttData): string {
 
 function serializeTask(t: GanttTask): string {
   const parts: string[] = [];
+  // Emit `crit` before other status keywords to match Mermaid convention.
+  if (t.crit)   parts.push('crit');
   if (t.status) parts.push(t.status);
   if (t.id)     parts.push(t.id);
   parts.push(t.afterId ? `after ${t.afterId}` : t.startDate);

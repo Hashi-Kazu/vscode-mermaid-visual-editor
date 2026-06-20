@@ -143,6 +143,124 @@ test('ganttToCode serializes status, id, afterId and duration', () => {
   assert.match(code, /B :t2, after t1, 2d/);
 });
 
+// ── crit serialization ────────────────────────────────────────────────────────
+
+test('ganttToCode serializes crit flag alone', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: 't1', label: 'A', status: '', crit: true, startDate: '2026-01-01', duration: 3 },
+      ] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.match(code, /A :crit, t1, 2026-01-01, 3d/);
+});
+
+test('ganttToCode serializes crit combined with done', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: 't1', label: 'A', status: 'done', crit: true, startDate: '2026-01-01', duration: 3 },
+      ] },
+    ],
+  };
+  const code = ganttToCode(data);
+  // crit must appear before done per Mermaid convention
+  assert.match(code, /A :crit, done, t1, 2026-01-01, 3d/);
+});
+
+test('ganttToCode does not emit crit when flag is absent or false', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: '', label: 'A', status: 'active', startDate: '2026-01-01', duration: 3 },
+      ] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.doesNotMatch(code, /crit/);
+});
+
+// ── crit round-trip ───────────────────────────────────────────────────────────
+
+test('crit round-trip: standalone crit survives serialize → parse', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: 't1', label: 'A', status: '', crit: true, startDate: '2026-01-01', duration: 3 },
+      ] },
+    ],
+  };
+  const round = parseGantt(ganttToCode(data))!;
+  const task = round.sections[0].tasks[0];
+  assert.equal(task.crit, true);
+  assert.equal(task.status, '');
+});
+
+test('crit round-trip: crit + done combination survives serialize → parse', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: 't1', label: 'A', status: 'done', crit: true, startDate: '2026-01-01', duration: 3 },
+      ] },
+    ],
+  };
+  const round = parseGantt(ganttToCode(data))!;
+  const task = round.sections[0].tasks[0];
+  assert.equal(task.crit, true);
+  assert.equal(task.status, 'done');
+});
+
+test('crit round-trip: removing crit flag reflects in serialized code', () => {
+  // Start with crit=true, then toggle it off
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: 't1', label: 'A', status: '', crit: true, startDate: '2026-01-01', duration: 3 },
+      ] },
+    ],
+  };
+  // Toggle off
+  delete data.sections[0].tasks[0].crit;
+  const code = ganttToCode(data);
+  assert.doesNotMatch(code, /crit/);
+  const round = parseGantt(code)!;
+  assert.equal(round.sections[0].tasks[0].crit, undefined);
+});
+
+// ── Section name round-trip ───────────────────────────────────────────────────
+
+test('section name change round-trip: renamed section survives serialize → parse', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: '旧名称', tasks: [
+        { id: '', label: 'T1', status: '', startDate: '2026-01-01', duration: 3 },
+      ] },
+    ],
+  };
+  // Simulate rename
+  data.sections[0].name = '新しい名称';
+  const code = ganttToCode(data);
+  assert.match(code, /section 新しい名称/);
+  const round = parseGantt(code)!;
+  assert.equal(round.sections[0].name, '新しい名称');
+  assert.equal(round.sections[0].tasks[0].label, 'T1');
+});
+
+test('section name change: Japanese multi-byte name round-trip', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'フェーズ 1　設計', tasks: [
+        { id: '', label: 'T1', status: '', startDate: '2026-01-01', duration: 5 },
+      ] },
+    ],
+  };
+  const code = ganttToCode(data);
+  const round = parseGantt(code)!;
+  assert.equal(round.sections[0].name, 'フェーズ 1　設計');
+});
+
 test('ganttToCode preserves a non-leading unnamed section across round-trip', () => {
   const data: GanttData = {
     title: 'P', dateFormat: 'YYYY-MM-DD', sections: [

@@ -318,6 +318,18 @@
     });
     labelCell.appendChild(labelText);
 
+    // Crit toggle: shows whether the task is on the critical path
+    const critBtn = el('span', 'crit-toggle' + (task.crit ? ' crit-on' : ''));
+    critBtn.textContent = '!';
+    critBtn.title = task.crit ? 'クリティカル解除' : 'クリティカルに設定';
+    critBtn.addEventListener('mousedown', e => e.stopPropagation());
+    critBtn.addEventListener('click', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleCrit(si, ti);
+    });
+    labelCell.appendChild(critBtn);
+
     labelCell.addEventListener('mouseenter', () => { deleteTarget = { si, ti }; });
     grid.appendChild(labelCell);
     rowIndex.push({ type: 'task', si, ti, el: labelCell });
@@ -375,7 +387,10 @@
     } else {
       const x = Math.round(dateToX(task.startDate));
       const w = Math.max(RESIZE_W + 4, Math.round(task.duration * pxPerDay));
-      const bar = el('div', 'gantt-bar status-' + (task.status || 'default'));
+      // Build class list: base status class + optional crit modifier
+      let barCls = 'gantt-bar status-' + (task.status || 'default');
+      if (task.crit) barCls += ' crit';
+      const bar = el('div', barCls);
       bar.style.left = x + 'px';
       bar.style.width = w + 'px';
       bar.style.top   = BAR_TOP + 'px';
@@ -1204,6 +1219,7 @@
       id: '',
       label: orig.label,
       status: orig.status,
+      ...(orig.crit ? { crit: true } : {}),
       startDate: addDays(orig.startDate, orig.duration || 0),
       duration: orig.duration,
     };
@@ -1470,16 +1486,30 @@
     panState = null;
   }
 
+  /* ── Crit toggle ── */
+  function toggleCrit(si, ti) {
+    pushUndo();
+    const task = ganttData.sections[si].tasks[ti];
+    if (task.crit) {
+      delete task.crit;
+    } else {
+      task.crit = true;
+    }
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
+    render();
+  }
+
   /* ── Status picker ── */
   function showStatusPicker(si, ti, anchor) {
     removeStatusPicker();
     const picker = el('div', 'status-picker');
 
     const current = ganttData.sections[si].tasks[ti].status;
+    // `crit` is now a separate toggle (see crit-toggle button in the label cell),
+    // so the status picker only shows done / active / unset.
     const STATUSES = [
       { value: 'done',   label: '✓  完了 (done)',    cls: 'pick-done'    },
       { value: 'active', label: '▶  進行中 (active)', cls: 'pick-active'  },
-      { value: 'crit',   label: '!  重要 (crit)',     cls: 'pick-crit'    },
       { value: '',       label: '○  未設定',           cls: 'pick-default' },
     ];
 

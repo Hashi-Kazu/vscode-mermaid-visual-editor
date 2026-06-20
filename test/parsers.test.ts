@@ -48,3 +48,57 @@ test('parseGantt parses sections, tasks and dependencies', () => {
 test('parseGantt returns null for non-gantt content', () => {
   assert.equal(parseGantt('```mermaid\nflowchart TD\n    A --> B\n```'), null);
 });
+
+// ── Section name round-trip ──────────────────────────────────────────────────
+
+test('parseGantt round-trip preserves section name after rename', () => {
+  // Simulate section rename: serialize with new name, then re-parse.
+  // This guards against the bug where section name changes were not reflected.
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n\n    section 旧セクション名\n        T1 :2026-01-01, 3d\n';
+  const data = parseGantt(code)!;
+  // Rename the section
+  data.sections[0].name = '新しいセクション名';
+  // Re-serialize and re-parse
+  const { ganttToCode } = require('../src/ganttSerializer');
+  const newCode = ganttToCode(data);
+  const reparsed = parseGantt(newCode)!;
+  assert.equal(reparsed.sections[0].name, '新しいセクション名');
+  assert.equal(reparsed.sections[0].tasks[0].label, 'T1');
+});
+
+// ── crit keyword parsing ──────────────────────────────────────────────────────
+
+test('parseGantt parses standalone crit keyword as crit flag', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T1 :crit, t1, 2026-01-01, 5d\n';
+  const data = parseGantt(code)!;
+  const task = data.sections[0].tasks[0];
+  assert.equal(task.crit, true);
+  assert.equal(task.status, '');
+  assert.equal(task.id, 't1');
+  assert.equal(task.duration, 5);
+});
+
+test('parseGantt parses crit combined with done status', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T1 :crit, done, t1, 2026-01-01, 3d\n';
+  const data = parseGantt(code)!;
+  const task = data.sections[0].tasks[0];
+  assert.equal(task.crit, true);
+  assert.equal(task.status, 'done');
+  assert.equal(task.id, 't1');
+});
+
+test('parseGantt parses done then crit (reversed order)', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T1 :done, crit, 2026-01-01, 7d\n';
+  const data = parseGantt(code)!;
+  const task = data.sections[0].tasks[0];
+  assert.equal(task.crit, true);
+  assert.equal(task.status, 'done');
+});
+
+test('parseGantt does not set crit flag when keyword absent', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T1 :done, t1, 2026-01-01, 3d\n';
+  const data = parseGantt(code)!;
+  const task = data.sections[0].tasks[0];
+  assert.equal(task.crit, undefined);
+  assert.equal(task.status, 'done');
+});
