@@ -102,3 +102,94 @@ test('parseGantt does not set crit flag when keyword absent', () => {
   assert.equal(task.crit, undefined);
   assert.equal(task.status, 'done');
 });
+
+// ── milestone keyword parsing ─────────────────────────────────────────────────
+
+test('parseGantt parses milestone keyword as status milestone', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n    section S\n        M1 :milestone, m1, 2026-03-01, 0d\n';
+  const data = parseGantt(code)!;
+  const task = data.sections[0].tasks[0];
+  assert.equal(task.status, 'milestone');
+  assert.equal(task.crit, undefined);
+  assert.equal(task.id, 'm1');
+});
+
+test('parseGantt parses milestone + crit combination', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n    section S\n        M1 :crit, milestone, m1, 2026-03-01, 0d\n';
+  const data = parseGantt(code)!;
+  const task = data.sections[0].tasks[0];
+  assert.equal(task.status, 'milestone');
+  assert.equal(task.crit, true);
+  assert.equal(task.id, 'm1');
+});
+
+// ── active status parsing ─────────────────────────────────────────────────────
+
+test('parseGantt parses active status', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T1 :active, a1, 2026-02-01, 5d\n';
+  const data = parseGantt(code)!;
+  const task = data.sections[0].tasks[0];
+  assert.equal(task.status, 'active');
+  assert.equal(task.crit, undefined);
+  assert.equal(task.id, 'a1');
+  assert.equal(task.duration, 5);
+});
+
+test('parseGantt parses active + crit combination', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T1 :active, crit, a1, 2026-02-01, 3d\n';
+  const data = parseGantt(code)!;
+  const task = data.sections[0].tasks[0];
+  assert.equal(task.status, 'active');
+  assert.equal(task.crit, true);
+});
+
+// ── axisFormat / title parsing ────────────────────────────────────────────────
+
+test('parseGantt parses axisFormat directive', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n    axisFormat %m/%d\n    section S\n        T1 :2026-01-01, 2d\n';
+  const data = parseGantt(code)!;
+  assert.equal(data.axisFormat, '%m/%d');
+});
+
+test('parseGantt parses title directive with Japanese text', () => {
+  const code = 'gantt\n    title プロジェクト計画\n    dateFormat YYYY-MM-DD\n    section S\n        T1 :2026-01-01, 2d\n';
+  const data = parseGantt(code)!;
+  assert.equal(data.title, 'プロジェクト計画');
+});
+
+test('parseGantt returns undefined axisFormat when directive is absent', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T1 :2026-01-01, 2d\n';
+  const data = parseGantt(code)!;
+  assert.equal(data.axisFormat, undefined);
+});
+
+// ── root-level tasks (no section) ─────────────────────────────────────────────
+
+test('parseGantt places pre-section tasks in leading unnamed section', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n    T1 :t1, 2026-01-01, 3d\n    T2 :t2, 2026-01-04, 2d\n';
+  const data = parseGantt(code)!;
+  // Tasks without a preceding section line land in the implicit leading section.
+  assert.equal(data.sections.length, 1);
+  assert.equal(data.sections[0].name, '');
+  assert.equal(data.sections[0].tasks.length, 2);
+  assert.equal(data.sections[0].tasks[0].label, 'T1');
+  assert.equal(data.sections[0].tasks[1].label, 'T2');
+});
+
+// ── no-arrow edge styles ──────────────────────────────────────────────────────
+
+test('parseFlowchart parses solid-no-arrow edge (A --- B)', () => {
+  const data = parseFlowchart('flowchart TD\n    A --- B')!;
+  assert.equal(data.edges.length, 1);
+  assert.equal(data.edges[0].style, 'solid-no-arrow');
+  assert.equal(data.edges[0].from, 'A');
+  assert.equal(data.edges[0].to, 'B');
+});
+
+test('parseFlowchart parses dotted-no-arrow edge (A -.- B)', () => {
+  const data = parseFlowchart('flowchart TD\n    A -.- B')!;
+  assert.equal(data.edges.length, 1);
+  assert.equal(data.edges[0].style, 'dotted-no-arrow');
+  assert.equal(data.edges[0].from, 'A');
+  assert.equal(data.edges[0].to, 'B');
+});

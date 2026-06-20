@@ -348,3 +348,174 @@ test('ganttApply preserves the mermaid fence on CRLF documents', () => {
   assert.match(out, /```mermaid/);
   assert.match(out, /title Y/);
 });
+
+// ── milestone serialization ───────────────────────────────────────────────────
+
+test('ganttToCode serializes milestone status', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: 'm1', label: 'M1', status: 'milestone', startDate: '2026-03-01', duration: 0 },
+      ] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.match(code, /M1 :milestone, m1, 2026-03-01, 0d/);
+});
+
+test('ganttToCode serializes crit + milestone (crit first)', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: 'm1', label: 'M1', status: 'milestone', crit: true, startDate: '2026-03-01', duration: 0 },
+      ] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.match(code, /M1 :crit, milestone, m1, 2026-03-01, 0d/);
+});
+
+// ── active status serialization ───────────────────────────────────────────────
+
+test('ganttToCode serializes active status', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: 'a1', label: 'A', status: 'active', startDate: '2026-02-01', duration: 5 },
+      ] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.match(code, /A :active, a1, 2026-02-01, 5d/);
+});
+
+test('ganttToCode serializes crit + active (crit first)', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: 'a1', label: 'A', status: 'active', crit: true, startDate: '2026-02-01', duration: 3 },
+      ] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.match(code, /A :crit, active, a1, 2026-02-01, 3d/);
+});
+
+// ── axisFormat / title serialization ─────────────────────────────────────────
+
+test('ganttToCode emits axisFormat line when set', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', axisFormat: '%m/%d', sections: [
+      { name: 'S', tasks: [] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.match(code, /axisFormat %m\/%d/);
+});
+
+test('ganttToCode omits axisFormat line when not set', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.doesNotMatch(code, /axisFormat/);
+});
+
+test('ganttToCode omits axisFormat line when empty string', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', axisFormat: '', sections: [
+      { name: 'S', tasks: [] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.doesNotMatch(code, /axisFormat/);
+});
+
+test('ganttToCode emits title line when set', () => {
+  const data: GanttData = {
+    title: 'test', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.match(code, /title test/);
+});
+
+test('ganttToCode omits title line when empty string', () => {
+  const data: GanttData = {
+    title: '', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.doesNotMatch(code, /title /);
+});
+
+// ── milestone round-trip ──────────────────────────────────────────────────────
+
+test('milestone round-trip: status milestone survives serialize → parse', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: 'm1', label: 'M1', status: 'milestone', startDate: '2026-03-01', duration: 0 },
+      ] },
+    ],
+  };
+  const round = parseGantt(ganttToCode(data))!;
+  const task = round.sections[0].tasks[0];
+  assert.equal(task.status, 'milestone');
+  assert.equal(task.crit, undefined);
+  assert.equal(task.id, 'm1');
+});
+
+test('milestone round-trip: crit + milestone survives serialize → parse', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: 'm1', label: 'M1', status: 'milestone', crit: true, startDate: '2026-03-01', duration: 0 },
+      ] },
+    ],
+  };
+  const round = parseGantt(ganttToCode(data))!;
+  const task = round.sections[0].tasks[0];
+  assert.equal(task.status, 'milestone');
+  assert.equal(task.crit, true);
+});
+
+// ── active + crit round-trip ──────────────────────────────────────────────────
+
+test('active+crit round-trip: combination survives serialize → parse', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: 'a1', label: 'A', status: 'active', crit: true, startDate: '2026-02-01', duration: 3 },
+      ] },
+    ],
+  };
+  const round = parseGantt(ganttToCode(data))!;
+  const task = round.sections[0].tasks[0];
+  assert.equal(task.status, 'active');
+  assert.equal(task.crit, true);
+});
+
+// ── multiple mermaid blocks: flowApply / ganttApply target only correct block ─
+
+test('flowApply updates only the first flowchart block in a multi-block document', () => {
+  const doc = '# Doc\n\n```mermaid\nflowchart TD\n    A --> B\n```\n\nText\n\n```mermaid\ngantt\n    title G\n    dateFormat YYYY-MM-DD\n```\n';
+  const { applyToDocument: flowApply } = require('../src/flowchartSerializer');
+  const out = flowApply(doc, 'project.md', 'flowchart LR\n    X --> Y');
+  assert.match(out, /flowchart LR/);
+  assert.match(out, /X --> Y/);
+  // The gantt block must remain intact
+  assert.match(out, /title G/);
+});
+
+test('ganttApply updates only the gantt mermaid block and leaves other content', () => {
+  const doc = '# Doc\n\n```mermaid\ngantt\n    title Old\n    dateFormat YYYY-MM-DD\n```\n\nSome text after.\n';
+  const out = ganttApply(doc, 'project.md', 'gantt\n    title New\n    dateFormat YYYY-MM-DD');
+  assert.match(out, /title New/);
+  assert.doesNotMatch(out, /title Old/);
+  assert.match(out, /Some text after\./);
+});
