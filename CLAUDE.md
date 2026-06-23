@@ -63,6 +63,11 @@ dist/             # ビルド出力（自動生成）
 - **検証**: `npm run build`（esbuild）と `npm test`。esbuild は型チェックしないので、型が不安なら `npx tsc --noEmit -p tsconfig.json`。ただし `_handleExport` の filters 由来の strict エラーは既知・無関係で無視可。
 - 「遅延分離」ポリシー（要求仕様書 R-FP-01〜03）を尊重し、全面正規化はしない。
 
+## アーキテクチャ判断
+
+重要な設計判断は `docs/adr/` に記録されている。
+新機能実装や既存コードの変更前に、関連する ADR を確認すること。
+
 ## 注意事項
 
 - Marketplace への公開は GitHub Actions が自動で行う（main push 時。`publisher` は push まで担当）
