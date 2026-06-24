@@ -14,7 +14,6 @@ VS Code拡張機能。TypeScript + esbuild + VS Code API 構成。
 
 ```bash
 npm run build     # 開発ビルド → dist/
-npm run package   # .vsix 生成（vsce package）
 npm run watch     # ウォッチモード
 ```
 
@@ -40,7 +39,7 @@ dist/             # ビルド出力（自動生成）
   2. **受け入れテストはユーザーから明示的に指示があった場合のみ実行する。** 指示がない場合はスキップして手順 3 へ進む。実行する場合: main が `acceptance-test` を起動 → テスト実行・ステータス `■■■` 反映・結果返却
      - **FAIL あり**: main が `feature-dev` を再起動して修正させる（FAIL 詳細を渡す）
      - **PASS / SKIP のみ**: 手順 3 へ進む
-  3. main が `publisher` を起動 → .vsix ビルド〜commit〜push まで完了
+  3. main が `publisher` を起動 → build 確認〜commit〜push まで完了
   - 停止するケース: `feature-dev` が失敗・中断、または「`debugger` 必要」と報告した場合は以降を起動せず停止して報告する
   - 最終ゲート（バージョン整合・lint/build 失敗時は push せず停止）は `publisher` 側で従来どおり機能する
 - バージョンポリシー: 要件変更あり → マイナーアップ / コード修正のみ → パッチアップ
@@ -53,7 +52,7 @@ dist/             # ビルド出力（自動生成）
 | `feature-dev` | 開発全部（コード・仕様書・バージョン・受け入れテスト更新） |
 | `debugger` | バグ調査のみ（読み取り専用） |
 | `acceptance-test` | 受け入れテスト実行・ステータス `■■■` 反映 |
-| `publisher` | .vsix ビルド＋git push |
+| `publisher` | build 確認＋git push |
 
 > **エージェント定義の管理**: エージェント定義（Claude Code = `.claude/agents/*.md`、Codex = `.codex/agents/*.toml`）は `C:\Claude Code\_agent-templates`（正本）から配布された同期コピー。**直接編集せず**、正本を編集して `_agent-templates\sync-agents.ps1` を実行すること（直接編集は次回同期で上書きされる）。プロジェクト固有の事情はエージェントではなく、このプロジェクト指示ファイル（`AGENTS.md`＝正本 / `CLAUDE.md` は `@AGENTS.md` で取り込み）に書く。
 
