@@ -521,8 +521,8 @@
     // ズーム倍率に合わせて入力欄の文字サイズを少しだけ拡大する。
     // 固定だと拡大表示中に小さく見えるが、倍率比例だと大きすぎるため
     // 平方根で緩やかに増やし、上限を抑える。
-    const fontSize = Math.max(14, Math.min(14 * Math.sqrt(scale), 26));
-    const w = Math.max(bbox.width + fontSize, fontSize * 5);
+    const fontSize = Math.max(12, Math.min(12 * Math.sqrt(scale), 22));
+    const w = Math.max(bbox.width + fontSize, fontSize * 4);
     editInput.value = value;
     editInput.style.fontSize = fontSize + 'px';
     editInput.style.width = w + 'px';

@@ -190,11 +190,11 @@ path.flowchart-link.fc-selected {
   border-radius: 4px;
   background: var(--vscode-input-background);
   color: var(--vscode-input-foreground);
-  font-size: 16px; /* 既定値。実際のサイズは showEditInput がズームに応じて指定する */
+  font-size: 14px; /* 既定値。実際のサイズは showEditInput がズームに応じて指定する */
   font-family: var(--vscode-font-family);
-  padding: 0.25em 0.6em; /* 文字サイズに比例 */
+  padding: 0.2em 0.5em; /* 文字サイズに比例 */
   outline: none;
-  min-width: 80px;
+  min-width: 64px;
   text-align: center;
 }
 
