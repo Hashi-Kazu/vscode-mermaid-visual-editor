@@ -445,6 +445,7 @@ export class EditorPanel {
   private async _writeDocument(newDocText: string): Promise<boolean> {
     this._isOperating = true;
     try {
+      await this._refreshDocument();
       if (await this._hasConcurrentChange(newDocText)) {
         const proceed = await this._resolveConflict(newDocText);
         if (!proceed) return false; // user chose "load latest" — abandon this write
@@ -540,9 +541,23 @@ export class EditorPanel {
     }
   }
 
+  /**
+   * Refresh the backing TextDocument reference. When the source editor is
+   * closed, VS Code may dispose the backing TextDocument, leaving
+   * this._document a stale/closed reference whose save() is a no-op.
+   * openTextDocument returns the already-loaded instance if present and loads
+   * (without revealing an editor) otherwise, so save() lands on the current
+   * instance and applyEdit targets the loaded doc rather than forcing a fresh
+   * editor to open.
+   */
+  private async _refreshDocument(): Promise<void> {
+    this._document = await vscode.workspace.openTextDocument(this._document.uri);
+  }
+
   /** Reload the document from disk and re-sync the panel to that state. */
   private async _reloadFromDisk(): Promise<void> {
     try {
+      await this._refreshDocument();
       const bytes = await vscode.workspace.fs.readFile(this._document.uri);
       const diskText = Buffer.from(bytes).toString('utf8');
       // Bring the in-memory TextDocument up to date if it lags the disk.
