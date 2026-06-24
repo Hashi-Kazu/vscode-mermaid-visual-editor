@@ -711,20 +711,6 @@
     }
   });
 
-  // ダブルクリックで空白部分にノードを追加する
-  canvasWrap.addEventListener('dblclick', (e) => {
-    if (e.target.closest('g.node, .edgePath, .flowchart-link, .fc-edge-hit, .edgeLabel, .fc-menu, .fc-port, #fc-edit-overlay')) return;
-    if (!rawCode) return;
-    e.preventDefault();
-
-    const rect = canvasWrap.getBoundingClientRect();
-    const x = Math.round((e.clientX - rect.left - tx) / scale);
-    const y = Math.round((e.clientY - rect.top  - ty) / scale);
-
-    pushUndo();
-    send({ type: 'addNode', x, y });
-  });
-
   canvasWrap.addEventListener('mousedown', (e) => {
     // 入力欄外のどこかをクリックしたら編集を確定する
     // （パン用の preventDefault が blur を抑止するため明示的に確定が必要）
