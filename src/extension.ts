@@ -49,7 +49,15 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscode.commands.registerCommand('mermaid.openFlowchart', (uri?: vscode.Uri) =>
       openEditor(uri, 'flowchart')
-    )
+    ),
+    vscode.window.onDidChangeActiveTextEditor(editor => {
+      if (!editor) return;
+      const follow = vscode.workspace
+        .getConfiguration('mermaid')
+        .get<boolean>('followActiveEditor', true);
+      if (!follow) return;
+      EditorPanel.followActiveDocument(editor.document);
+    })
   );
 }
 

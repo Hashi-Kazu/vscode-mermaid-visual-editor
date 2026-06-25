@@ -23,6 +23,11 @@ function detectType(text: string): DiagramType | null {
   return null;
 }
 
+function isSupportedDocument(doc: vscode.TextDocument): boolean {
+  return (doc.languageId === 'markdown' || doc.languageId === 'mermaid')
+    && detectType(doc.getText()) !== null;
+}
+
 export class EditorPanel {
   static currentPanel: EditorPanel | undefined;
 
@@ -32,8 +37,14 @@ export class EditorPanel {
   private _disposables: vscode.Disposable[] = [];
   private _type: DiagramType | null = null;
   private _isOperating = false;
+  private _isSwitchPending = false;
   private _debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private _applyQueue: Promise<void> = Promise.resolve();
+  private _documentOperationQueue: Promise<void> = Promise.resolve();
+  private _switchQueue: Promise<void> = Promise.resolve();
+  private _switchRequestId = 0;
+  private _documentGeneration = 0;
+  private _documentChangeDisposable: vscode.Disposable | undefined;
 
   // The exact document text (newline-normalized) the current displayed/cached
   // state was last derived from. Used as the optimistic-concurrency "base":
@@ -54,17 +65,8 @@ export class EditorPanel {
 
     if (EditorPanel.currentPanel) {
       const ep = EditorPanel.currentPanel;
-      ep._document = doc;
       ep._panel.reveal(vscode.ViewColumn.Beside);
-
-      if (type && type !== ep._type) {
-        ep._type = type;
-        ep._panel.webview.html = ep._buildHtml();
-        // 'ready' message will trigger _sendUpdate
-      } else {
-        if (!ep._type) ep._type = type;
-        ep._sendUpdate();
-      }
+      ep._requestDocumentSwitch(doc, type);
       return;
     }
 
@@ -80,6 +82,13 @@ export class EditorPanel {
     );
 
     EditorPanel.currentPanel = new EditorPanel(panel, extensionUri, doc, type);
+  }
+
+  static followActiveDocument(doc: vscode.TextDocument): void {
+    if (!EditorPanel.currentPanel || !isSupportedDocument(doc)) return;
+    const ep = EditorPanel.currentPanel;
+    if (!ep._isSwitchPending && ep._document.uri.toString() === doc.uri.toString()) return;
+    ep._requestDocumentSwitch(doc, detectType(doc.getText()));
   }
 
   private constructor(
@@ -104,21 +113,64 @@ export class EditorPanel {
       this._disposables
     );
 
-    vscode.workspace.onDidChangeTextDocument(
+    this._bindDocumentListener();
+  }
+
+  private _bindDocumentListener(): void {
+    this._documentChangeDisposable?.dispose();
+    const documentUri = this._document.uri.toString();
+    const generation = this._documentGeneration;
+    this._documentChangeDisposable = vscode.workspace.onDidChangeTextDocument(
       (e) => {
         if (this._isOperating) return;
-        if (e.document.uri.toString() !== this._document.uri.toString()) return;
+        if (e.document.uri.toString() !== documentUri) return;
         clearTimeout(this._debounceTimer);
-        this._debounceTimer = setTimeout(() => this._sendUpdate(), 500);
-      },
-      null,
-      this._disposables
+        this._debounceTimer = setTimeout(() => {
+          if (generation !== this._documentGeneration) return;
+          if (this._document.uri.toString() !== documentUri) return;
+          this._sendUpdate();
+        }, 500);
+      }
     );
+  }
+
+  private _requestDocumentSwitch(doc: vscode.TextDocument, type: DiagramType | null): void {
+    const requestId = ++this._switchRequestId;
+    this._isSwitchPending = true;
+    this._switchQueue = this._switchQueue
+      .then(async () => {
+        await this._applyQueue;
+        await this._documentOperationQueue;
+        if (requestId !== this._switchRequestId) return;
+
+        clearTimeout(this._debounceTimer);
+        this._debounceTimer = undefined;
+        this._documentGeneration++;
+        this._document = doc;
+        this._type = type;
+        // Both old-document queues are settled before resetting operation
+        // state, so this cannot mask an in-flight write's `_isOperating`.
+        this._isOperating = false;
+        this._applyQueue = Promise.resolve();
+        this._documentOperationQueue = Promise.resolve();
+        this._baseText = null;
+        this._ganttData = null;
+        this._bindDocumentListener();
+        this._panel.webview.html = this._buildHtml();
+        // The rebuilt webview sends `ready`, which synchronizes the new document.
+      })
+      .catch(() => { /* keep switch queue alive */ })
+      .finally(() => {
+        if (requestId === this._switchRequestId) {
+          this._isSwitchPending = false;
+        }
+      });
   }
 
   // ── Message routing ──────────────────────────────────────────────────────
 
   private async _handleMessage(msg: Record<string, unknown>): Promise<void> {
+    if (this._isSwitchPending) return;
     if (msg.type === 'ready') {
       this._sendUpdate();
       return;
@@ -165,7 +217,7 @@ export class EditorPanel {
         this._structuralEdit(msg.gantt);
         break;
       case 'save':
-        await this._document.save();
+        await this._saveDocument();
         this._panel.webview.postMessage({ type: 'saved' });
         break;
     }
@@ -297,7 +349,7 @@ export class EditorPanel {
       case 'undo':             await this._applyFlowRaw(msg.code); break;
       case 'export':           await this._handleExport(msg.format, msg.data); break;
       case 'save':
-        await this._document.save();
+        await this._saveDocument();
         this._panel.webview.postMessage({ type: 'saved' });
         break;
     }
@@ -432,6 +484,29 @@ export class EditorPanel {
     }
   }
 
+  private _runDocumentOperation<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this._documentOperationQueue.then(async () => {
+      this._isOperating = true;
+      try {
+        return await operation();
+      } finally {
+        this._isOperating = false;
+      }
+    });
+    this._documentOperationQueue = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
+  }
+
+  private _saveDocument(): Promise<boolean> {
+    return this._runDocumentOperation(async () => {
+      await this._refreshDocument();
+      return this._document.save();
+    });
+  }
+
   // ── Optimistic concurrency control (lost-update prevention) ────────────────
 
   /**
@@ -442,9 +517,8 @@ export class EditorPanel {
    * loss". Returns true if the new content was written, false if the write was
    * abandoned (conflict resolved as "load latest") or applyEdit failed.
    */
-  private async _writeDocument(newDocText: string): Promise<boolean> {
-    this._isOperating = true;
-    try {
+  private _writeDocument(newDocText: string): Promise<boolean> {
+    return this._runDocumentOperation(async () => {
       await this._refreshDocument();
       if (await this._hasConcurrentChange(newDocText)) {
         const proceed = await this._resolveConflict(newDocText);
@@ -468,9 +542,7 @@ export class EditorPanel {
       this._baseText = normalizeText(newDocText);
       this._panel.webview.postMessage({ type: 'saved' });
       return true;
-    } finally {
-      this._isOperating = false;
-    }
+    });
   }
 
   /**
@@ -594,7 +666,7 @@ export class EditorPanel {
     const nonce = nonce32();
     const uri = (f: string) => wv.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', f));
 
-    this._panel.title = 'Gantt エディタ';
+    this._panel.title = `Gantt エディタ — ${path.basename(this._document.fileName)}`;
     return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -654,7 +726,7 @@ export class EditorPanel {
     const nonce = nonce32();
     const uri = (f: string) => wv.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', f));
 
-    this._panel.title = 'フローチャート エディタ';
+    this._panel.title = `フローチャート エディタ — ${path.basename(this._document.fileName)}`;
     return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -729,7 +801,7 @@ export class EditorPanel {
     const wv = this._panel.webview;
     const nonce = nonce32();
 
-    this._panel.title = 'Mermaid エディタ';
+    this._panel.title = `Mermaid エディタ — ${path.basename(this._document.fileName)}`;
     return `<!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -783,6 +855,8 @@ export class EditorPanel {
 
   dispose(): void {
     EditorPanel.currentPanel = undefined;
+    clearTimeout(this._debounceTimer);
+    this._documentChangeDisposable?.dispose();
     this._panel.dispose();
     this._disposables.forEach(d => d.dispose());
   }
