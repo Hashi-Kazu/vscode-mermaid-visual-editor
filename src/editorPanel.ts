@@ -30,7 +30,6 @@ function isSupportedDocument(doc: vscode.TextDocument): boolean {
 
 export class EditorPanel {
   static currentPanel: EditorPanel | undefined;
-  private static _pendingViewerFocusRestore = false;
 
   private readonly _panel: vscode.WebviewPanel;
   private readonly _extensionUri: vscode.Uri;
@@ -46,8 +45,6 @@ export class EditorPanel {
   private _switchRequestId = 0;
   private _documentGeneration = 0;
   private _documentChangeDisposable: vscode.Disposable | undefined;
-  private _wasActive = false;
-  private _restoreFocusAfterNextUpdate = false;
 
   // The exact document text (newline-normalized) the current displayed/cached
   // state was last derived from. Used as the optimistic-concurrency "base":
@@ -87,22 +84,11 @@ export class EditorPanel {
     EditorPanel.currentPanel = new EditorPanel(panel, extensionUri, doc, type);
   }
 
-  static takePendingViewerFocusRestore(): boolean {
-    const shouldRestore = EditorPanel._pendingViewerFocusRestore;
-    EditorPanel._pendingViewerFocusRestore = false;
-    return shouldRestore;
-  }
-
-  static discardPendingViewerFocusRestore(): void {
-    EditorPanel._pendingViewerFocusRestore = false;
-  }
-
-  static followActiveDocument(doc: vscode.TextDocument, restoreFocus = false): boolean {
-    if (!EditorPanel.currentPanel || !isSupportedDocument(doc)) return false;
+  static followActiveDocument(doc: vscode.TextDocument): void {
+    if (!EditorPanel.currentPanel || !isSupportedDocument(doc)) return;
     const ep = EditorPanel.currentPanel;
-    if (!ep._isSwitchPending && ep._document.uri.toString() === doc.uri.toString()) return false;
-    ep._requestDocumentSwitch(doc, detectType(doc.getText()), restoreFocus);
-    return true;
+    if (!ep._isSwitchPending && ep._document.uri.toString() === doc.uri.toString()) return;
+    ep._requestDocumentSwitch(doc, detectType(doc.getText()));
   }
 
   private constructor(
@@ -115,17 +101,9 @@ export class EditorPanel {
     this._extensionUri = extensionUri;
     this._document = doc;
     this._type = type;
-    this._wasActive = this._panel.active;
 
     this._panel.webview.html = this._buildHtml();
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
-    this._panel.onDidChangeViewState((event) => {
-      const wasActive = this._wasActive;
-      this._wasActive = event.webviewPanel.active;
-      if (wasActive && !event.webviewPanel.active) {
-        EditorPanel._pendingViewerFocusRestore = true;
-      }
-    }, null, this._disposables);
 
     this._panel.webview.onDidReceiveMessage(
       async (msg: WebToExt | FlowWebToExt | { type: 'switchType'; diagramType: DiagramType }) => {
@@ -156,14 +134,9 @@ export class EditorPanel {
     );
   }
 
-  private _requestDocumentSwitch(
-    doc: vscode.TextDocument,
-    type: DiagramType | null,
-    restoreFocusAfterUpdate = false
-  ): void {
+  private _requestDocumentSwitch(doc: vscode.TextDocument, type: DiagramType | null): void {
     const requestId = ++this._switchRequestId;
     this._isSwitchPending = true;
-    this._restoreFocusAfterNextUpdate = false;
     this._switchQueue = this._switchQueue
       .then(async () => {
         await this._applyQueue;
@@ -183,7 +156,6 @@ export class EditorPanel {
         this._baseText = null;
         this._ganttData = null;
         this._bindDocumentListener();
-        this._restoreFocusAfterNextUpdate = restoreFocusAfterUpdate;
         this._panel.webview.html = this._buildHtml();
         // The rebuilt webview sends `ready`, which synchronizes the new document.
       })
@@ -478,13 +450,6 @@ export class EditorPanel {
     } else {
       this._panel.webview.postMessage({ type: 'empty' });
     }
-    this._restoreFocusIfRequested();
-  }
-
-  private _restoreFocusIfRequested(): void {
-    if (!this._restoreFocusAfterNextUpdate) return;
-    this._restoreFocusAfterNextUpdate = false;
-    this._panel.reveal(this._panel.viewColumn, false);
   }
 
   // ── Write helpers ─────────────────────────────────────────────────────────

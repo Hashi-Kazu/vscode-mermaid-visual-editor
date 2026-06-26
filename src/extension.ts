@@ -51,19 +51,12 @@ export function activate(context: vscode.ExtensionContext): void {
       openEditor(uri, 'flowchart')
     ),
     vscode.window.onDidChangeActiveTextEditor(editor => {
-      if (!editor) {
-        EditorPanel.discardPendingViewerFocusRestore();
-        return;
-      }
+      if (!editor) return;
       const follow = vscode.workspace
         .getConfiguration('mermaid')
         .get<boolean>('followActiveEditor', true);
-      if (!follow) {
-        EditorPanel.discardPendingViewerFocusRestore();
-        return;
-      }
-      const restoreFocus = EditorPanel.takePendingViewerFocusRestore();
-      EditorPanel.followActiveDocument(editor.document, restoreFocus);
+      if (!follow) return;
+      EditorPanel.followActiveDocument(editor.document);
     })
   );
 }
