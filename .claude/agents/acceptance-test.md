@@ -1,7 +1,7 @@
 ---
 name: acceptance-test
 description: 受け入れテストの実行と仕様ステータス最終反映を担当。テストが通った仕様を ■■■（テスト済）に更新し、結果（PASS/FAIL/SKIP）をまとめて呼び出し元に返す。
-model: sonnet
+model: haiku
 tools: Read, Edit, Glob, Grep, Bash
 disallowedTools: [Write, NotebookEdit]
 ---
