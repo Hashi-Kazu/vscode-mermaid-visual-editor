@@ -2,46 +2,34 @@
 
 ## 基本方針
 
-開発タスクは自明かどうかで処理を分ける。自明な修正（typo・1〜2 行・設定値変更）は main が直接実行し、非自明なタスクは `planner` を経由して調査・仕様策定を行ってから実装する。
+自明な修正はmainが直接処理する。非自明な開発はplannerが調査・仕様策定した後、原則としてCodexが実装する。各担当は必要なファイルと仕様ID周辺だけを読み、全体探索しない。
 
-すべてのエージェント起動は main が行う。サブエージェント間で直接指示はできない。
+## 通常の開発フロー
 
-## エージェント一覧
+1. mainがタスクを自明／非自明に分類する。
+2. 非自明ならplannerが読み取り専用で調査し、固定形式の引き渡し票を作る。
+3. mainは票を編集・要約せず、デフォルトではCodexへ渡す。Claude実装はユーザーが明示した場合だけ `feature-dev` を使う。
+4. 実装担当は指定範囲を変更し、build/lint等の実装検証とテストコード更新を行う。受け入れテストは実行しない。
+5. 明示指示がある場合だけ、mainが同じ票を `acceptance-test` へ渡す。
+6. `acceptance-test` は指定テストだけを実行し、PASSした指定仕様を `■■■` へ更新する。
+7. mainが `release-policy.md` に従ってpublishする。
 
-| エージェント | 役割 |
-|---|---|
-| `planner` | 調査・仕様策定・Codex 引き渡し票生成（読み取り専用） |
-| `feature-dev` | 実装担当（通常は Codex が実行。「Claude で実装して」時または codex exec 失敗後に Claude のサブエージェントとして起動） |
-| `acceptance-test` | 受け入れテスト実行・ステータス `■■■` 反映 |
+Codex失敗時は自動でClaudeへ切り替えない。テストFAILが実装バグならplannerを経由せずCodexへ戻し、設計・仕様の問題だけplannerへ戻す。
 
-## 開発フロー
+## 受け入れテストのみのフロー
 
-1. main がタスクを評価する。
-2. **自明な修正**（typo・1〜2 行・設定値変更）は main が直接実行し、publish 手順に従って commit & push する。
-3. 非自明な場合、main は自分でコードを調査せず即 `planner` を起動する。
-4. `planner` が調査・仕様策定を行い、Codex 引き渡し票を出力する。
-5. main が実装ランタイムを選択する：
-   - デフォルト → `codex exec --sandbox workspace-write "[引き渡し票]"` で Codex が実装・ビルド検証・テストコード作成
-   - 「Claude で実装して」→ `feature-dev` サブエージェントで Claude が実装
-   - `codex exec` 失敗 → エラーを報告して**必ず停止**。自動で `feature-dev` を起動しない。ユーザーから「Claude でやって」の指示があった後にのみ `feature-dev` を起動
-6. 受け入れテストの明示指示がある場合、main が `acceptance-test` を起動する。
-7. FAIL がある場合：
-   - **実装バグ** → `acceptance-test` の報告（失敗テスト名・エラー箇所）を添えて `codex exec` で修正させる（`planner` 不要）
-   - **設計ミス・仕様の見落とし**と判断した場合のみ `planner` に戻る
-8. main が AGENTS.md の「publish 手順」に従って直接 build / commit / push を実行する。
+1. 対象仕様IDまたは対象機能が分かる場合、plannerがテスト票を作る。
+2. 完全なテスト票が既に提示されている場合だけplannerを省略する。
+3. 対象が不明なら全件走査せず、mainがユーザーへ確認する。
+4. mainはCodexと `feature-dev` を起動せず、票を `acceptance-test` へ渡す。
+5. PASS時はUSDMステータスだけを更新し、コード、テスト、versionは変更しない。
 
-## feature-dev のルール
+## 引き渡し票
 
-- `feature-dev` は `npm test` を実行しない。テスト実行は `acceptance-test` の責務。
-- テストコードの更新・追加は行ってよい。
-- 検証は `npm run build`。型が不安なら `npx tsc --noEmit -p tsconfig.json` を使う。
-- `_handleExport` の filters 由来の strict エラーは既知・無関係で無視可。
-- 要件を変えたら `docs/requirements-usdm.md` を更新し、`package.json` のバージョンを揃える。
-- アーキテクチャを変えたら `docs/architecture.md` と関連 ADR を確認・更新する。
-- バージョンポリシーは、要件変更ありならマイナーアップ、コード修正のみならパッチアップ。
+見出しは `変更目的`、`触るファイル`、`変更内容`、`変更禁止`、`実行コマンド`、`受け入れ条件`、`参照した仕様ID` の7つに固定する。
+
+受け入れ条件には、仕様ID、テストファイル／テスト名、期待結果、単独実行コマンドを必ず含める。不足時は `acceptance-test` が何も実行・更新せずmainへ返す。
 
 ## エージェント定義の管理
 
-エージェント定義（Claude Code = `.claude/agents/*.md`、Codex = `.codex/agents/*.toml`）は `C:\Claude Code\_agent-templates`（正本）から配布された同期コピー。
-
-直接編集せず、正本を編集して `_agent-templates\sync-agents.ps1` を実行する。直接編集は次回同期で上書きされる。
+エージェント定義は `C:\Claude Code\_agent-templates` が正本。正本を編集して `sync-agents.ps1` を実行し、各リポジトリへ配布する。
