@@ -4,7 +4,7 @@ VS Code extension for Mermaid diagram preview and editing. TypeScript + esbuild 
 
 ## 必須ルール
 
-- **自明な修正**（typo・1〜2 行・設定値変更）は main が直接実行。サブエージェントは起動しない。
+- **自明な修正**（typo・1〜2 行・設定値変更）は main が直接実行し、publish 手順に従って commit & push する。サブエージェントは起動しない。
 - **非自明なタスク**は以下の順で実行する：
   1. `planner` を起動 → 調査・仕様策定・引き渡し票を生成
   2. 実装ランタイムを選択：
