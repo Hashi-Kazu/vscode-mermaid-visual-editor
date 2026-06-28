@@ -8,7 +8,7 @@ VS Code extension for Mermaid diagram preview and editing. TypeScript + esbuild 
 - `feature-dev` はコード修正・仕様書更新・バージョン更新・受け入れテスト更新まで担当する。
 - `feature-dev` は `npm test` を実行しない。テストコードの更新・追加は行ってよい。
 - 受け入れテストは、ユーザーから明示指示がある場合のみ `acceptance-test` で実行する。
-- publish は `publisher` が build / commit / push まで担当する。
+- publish（build / commit / push）は main が下記「publish 手順」に従って直接実行する。
 - 要求仕様書の正本は `docs/requirements-usdm.md`。
 - 要求・仕様を変えたら `docs/requirements-usdm.md` を更新し、`package.json` の version を揃える。
 - アーキテクチャ変更時は `docs/architecture.md` と関連 ADR を確認・更新する。
@@ -29,9 +29,9 @@ npm run build
 npm test
 ```
 
-## publisher 最短フロー
+## publish 手順（main が直接実行）
 
-publisher は以下だけ行う:
+main は以下だけ行う:
 
 1. `git status -sb`
 2. `npm run build`

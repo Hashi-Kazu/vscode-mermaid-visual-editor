@@ -13,7 +13,6 @@
 | `feature-dev` | 開発全部（コード・仕様書・バージョン・受け入れテスト更新） |
 | `debugger` | バグ調査のみ（読み取り専用） |
 | `acceptance-test` | 受け入れテスト実行・ステータス `■■■` 反映 |
-| `publisher` | build / commit / push |
 
 ## 開発フロー
 
@@ -22,7 +21,7 @@
 3. バグ調査が必要な場合は main が `debugger` を起動する。
 4. 受け入れテストはユーザーから明示的に指示があった場合のみ、main が `acceptance-test` を起動して実行する。指示がない場合はスキップする。
 5. FAIL がある場合は main が `feature-dev` を再起動して修正させる。
-6. PASS / SKIP のみ、または受け入れテストがスキップされた場合、main が `publisher` を起動する。
+6. PASS / SKIP のみ、または受け入れテストがスキップされた場合、main が AGENTS.md の「publish 手順」に従って直接 build / commit / push を実行する。
 
 ## feature-dev のルール
 

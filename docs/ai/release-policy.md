@@ -6,9 +6,9 @@
 - コード修正のみ: パッチアップ。
 - 要件を変えたら `docs/requirements-usdm.md` と `package.json` の `version` を揃える。
 
-## publisher の責務
+## publish 手順（main が直接実行）
 
-`publisher` は build / commit / push までを担当する。Marketplace 公開は `main` push 後に GitHub Actions が自動で行う。
+main は build / commit / push までを直接実行する。Marketplace 公開は `main` push 後に GitHub Actions が自動で行う。
 
 標準フロー:
 
@@ -19,4 +19,4 @@
 5. commit
 6. push
 
-`publisher` は機能コードの編集、不要なレビュー、リポジトリ全体の再調査、docs 全体の読み直し、`npm test` の実行をしない。
+機能コードの編集、不要なレビュー、リポジトリ全体の再調査、docs 全体の読み直し、`npm test` の実行はしない。
