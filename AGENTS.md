@@ -39,12 +39,15 @@ npm test
 
 main は以下だけ行う:
 
-1. `git status -sb`
-2. `npm run build`
-3. `git diff --stat`
-4. 必要な変更だけ stage
-5. commit
-6. push
+1. `package.json` の `version` が変更内容に合っているか確認する。上がっていなければ上げる（Marketplace は同一バージョンの再公開不可）。
+   - 要件変更あり → マイナーアップ
+   - コード修正のみ → パッチアップ
+2. `git status -sb`
+3. `npm run build`
+4. `git diff --stat`
+5. 必要な変更だけ stage
+6. commit
+7. push
 
 禁止:
 
