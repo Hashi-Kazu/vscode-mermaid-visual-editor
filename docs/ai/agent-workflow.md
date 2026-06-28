@@ -18,7 +18,7 @@
 
 1. main がタスクを評価する。
 2. **自明な修正**（typo・1〜2 行・設定値変更）は main が直接実行し、publish 手順に従って commit & push する。
-3. 非自明な場合、main が `planner` を起動する。
+3. 非自明な場合、main は自分でコードを調査せず即 `planner` を起動する。
 4. `planner` が調査・仕様策定を行い、Codex 引き渡し票を出力する。
 5. main が実装ランタイムを選択する：
    - デフォルト → `codex exec --sandbox workspace-write "[引き渡し票]"` で Codex が実装・ビルド検証・テストコード作成

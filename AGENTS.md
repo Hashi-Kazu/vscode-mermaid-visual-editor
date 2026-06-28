@@ -5,7 +5,7 @@ VS Code extension for Mermaid diagram preview and editing. TypeScript + esbuild 
 ## 必須ルール
 
 - **自明な修正**（typo・1〜2 行・設定値変更）は main が直接実行し、publish 手順に従って commit & push する。サブエージェントは起動しない。
-- **非自明なタスク**は以下の順で実行する：
+- **非自明なタスク**は以下の順で実行する（自分でコードを読んで調査しない。即 `planner` を起動する）：
   1. `planner` を起動 → 調査・仕様策定・引き渡し票を生成
   2. 実装ランタイムを選択：
      - デフォルト → `codex exec --sandbox workspace-write "[引き渡し票]"` で Codex に委譲
