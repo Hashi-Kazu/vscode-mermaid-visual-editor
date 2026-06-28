@@ -4,10 +4,15 @@ VS Code extension for Mermaid diagram preview and editing. TypeScript + esbuild 
 
 ## 必須ルール
 
-- 開発タスクは `feature-dev` を使う。
-- `feature-dev` はコード修正・仕様書更新・バージョン更新・受け入れテスト更新まで担当する。
-- `feature-dev` は `npm test` を実行しない。テストコードの更新・追加は行ってよい。
-- 受け入れテストは、ユーザーから明示指示がある場合のみ `acceptance-test` で実行する。
+- **自明な修正**（typo・1〜2 行・設定値変更）は main が直接実行。サブエージェントは起動しない。
+- **非自明なタスク**は以下の順で実行する：
+  1. `planner` を起動 → 調査・仕様策定・引き渡し票を生成
+  2. 実装ランタイムを選択：
+     - デフォルト → `codex exec --sandbox workspace-write "[引き渡し票]"` で Codex に委譲
+     - 「Claude で実装して」→ `feature-dev` サブエージェントで Claude が実装
+     - `codex exec` 失敗 → エラーを報告して停止。「Claude でやって」の指示後に `feature-dev` を起動
+  3. 明示指示がある場合のみ `acceptance-test` を起動してテスト実行・■■■ 反映
+- `codex exec` の並列起動禁止（OAuth 競合）。1 タスクずつ直列実行。
 - publish（build / commit / push）は main が下記「publish 手順」に従って直接実行する。
 - 要求仕様書の正本は `docs/requirements-usdm.md`。
 - 要求・仕様を変えたら `docs/requirements-usdm.md` を更新し、`package.json` の version を揃える。
