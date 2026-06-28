@@ -15,6 +15,9 @@ VS Code extension for Mermaid diagram preview and editing. TypeScript + esbuild 
      - 「Claude で実装して」→ `feature-dev` サブエージェントで Claude が実装
      - `codex exec` 失敗 → エラーを報告して**必ず停止**。自動で `feature-dev` を起動しない。ユーザーから「Claude でやって」の指示があった後にのみ `feature-dev` を起動
   3. 明示指示がある場合のみ `acceptance-test` を起動してテスト実行・■■■ 反映
+- `acceptance-test` で FAIL が出た場合：
+  - 実装バグ → `acceptance-test` の報告（失敗テスト名・エラー箇所）を添えて codex exec で修正させる（planner 不要）
+  - 設計ミス・仕様の見落としと判断した場合のみ `planner` に戻る
 - `codex exec` の並列起動禁止（OAuth 競合）。1 タスクずつ直列実行。
 - publish（build / commit / push）は main が下記「publish 手順」に従って直接実行する。
 - 要求仕様書の正本は `docs/requirements-usdm.md`。

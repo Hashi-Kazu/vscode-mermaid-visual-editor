@@ -25,7 +25,9 @@
    - 「Claude で実装して」→ `feature-dev` サブエージェントで Claude が実装
    - `codex exec` 失敗 → エラーを報告して**必ず停止**。自動で `feature-dev` を起動しない。ユーザーから「Claude でやって」の指示があった後にのみ `feature-dev` を起動
 6. 受け入れテストの明示指示がある場合、main が `acceptance-test` を起動する。
-7. FAIL がある場合は main が実装を再起動して修正させる。
+7. FAIL がある場合：
+   - **実装バグ** → `acceptance-test` の報告（失敗テスト名・エラー箇所）を添えて `codex exec` で修正させる（`planner` 不要）
+   - **設計ミス・仕様の見落とし**と判断した場合のみ `planner` に戻る
 8. main が AGENTS.md の「publish 手順」に従って直接 build / commit / push を実行する。
 
 ## feature-dev のルール
