@@ -9,6 +9,7 @@ VS Code extension for Mermaid diagram preview and editing. TypeScript + esbuild 
   1. `planner` を起動 → 調査・仕様策定・引き渡し票を生成
   2. 実装ランタイムを選択：
      - デフォルト → `codex exec --sandbox workspace-write "[引き渡し票]"` で Codex に委譲
+       （引き渡し票は Windows 引数長制限のため一時ファイル経由で渡すこと）
      - 「Claude で実装して」→ `feature-dev` サブエージェントで Claude が実装
      - `codex exec` 失敗 → エラーを報告して停止。「Claude でやって」の指示後に `feature-dev` を起動
   3. 明示指示がある場合のみ `acceptance-test` を起動してテスト実行・■■■ 反映
