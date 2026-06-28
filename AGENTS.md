@@ -11,7 +11,7 @@ VS Code extension for Mermaid diagram preview and editing. TypeScript + esbuild 
      - デフォルト → `codex exec --sandbox workspace-write "[引き渡し票]"` で Codex に委譲
        （引き渡し票は Windows 引数長制限のため一時ファイル経由で渡すこと）
      - 「Claude で実装して」→ `feature-dev` サブエージェントで Claude が実装
-     - `codex exec` 失敗 → エラーを報告して停止。「Claude でやって」の指示後に `feature-dev` を起動
+     - `codex exec` 失敗 → エラーを報告して**必ず停止**。自動で `feature-dev` を起動しない。ユーザーから「Claude でやって」の指示があった後にのみ `feature-dev` を起動
   3. 明示指示がある場合のみ `acceptance-test` を起動してテスト実行・■■■ 反映
 - `codex exec` の並列起動禁止（OAuth 競合）。1 タスクずつ直列実行。
 - publish（build / commit / push）は main が下記「publish 手順」に従って直接実行する。
