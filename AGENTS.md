@@ -4,7 +4,7 @@ VS Code extension for Mermaid diagram preview and editing. TypeScript + esbuild 
 
 ## 必須ルール
 
-- 自明な修正（typo・1〜2行・設定値変更）はmainが直接対応する。
+- 自明な修正（typo・1〜2行・設定値変更）はmainが直接対応する。不具合修正は原因が自明な場合（例：直前のコミットで壊したことが明らか）のみ自明扱い。原因調査が必要な場合は非自明として即 `planner` を起動する。
 - 非自明なタスクはmainが調査せず、`planner` に調査・仕様策定・引き渡し票生成を依頼する。
 - mainはplanner票を編集・要約せず実装担当へ渡す。デフォルトは `codex exec --sandbox workspace-write`、ユーザーが明示した場合だけClaudeの `feature-dev` を使う。
 - `codex exec` 失敗時は停止して報告する。自動でClaude実装へ切り替えない。Codexは並列起動しない。
