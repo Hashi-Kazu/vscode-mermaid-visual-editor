@@ -121,6 +121,10 @@
 
   /* ── Selection helper ── */
   function setSelected(si, ti) {
+    // 選択が変化しない場合は再描画しない。ダブルクリックの1回目のクリックで
+    // 再描画すると、ラベルDOM要素が入れ替わり2回目のクリックが古い（切り離された）
+    // 要素をターゲットにしてしまい、dblclick によるインライン編集が発火しなくなるため。
+    if (selected && selected.si === si && selected.ti === ti) return;
     selected = { si, ti };
     render();
   }
