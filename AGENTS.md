@@ -7,7 +7,10 @@ VS Code extension for Mermaid diagram preview and editing. TypeScript + esbuild 
 - 自明な修正（typo・1〜2行・設定値変更）はmainが直接対応する。不具合修正は原因が自明な場合（例：直前のコミットで壊したことが明らか）のみ自明扱い。原因調査が必要な場合は非自明として即 `planner` を起動する。
 - 非自明なタスクはmainが調査せず、`planner` に調査・仕様策定・引き渡し票生成を依頼する。
 - mainはplanner票を編集・要約せず実装担当へ渡す。デフォルトは `codex exec --sandbox workspace-write`、ユーザーが明示した場合だけClaudeの `feature-dev` を使う。
-- `codex exec` 失敗時は停止して報告する。自動でClaude実装へ切り替えない。Codexは並列起動しない。
+- `codex exec`が失敗した場合、原因により対応を分ける。
+  - タイムアウトによる失敗: リトライ前に`git status -sb`と`git diff --stat`で変更が既に反映されていないか確認する。反映済みなら再実行しない。未反映なら、より長いタイムアウトで再実行してよい。
+  - タイムアウト以外の失敗（コマンド未検出・権限エラー等）: 停止してユーザーに報告する。自動でClaude実装へ切り替えない。
+- Codexは並列起動しない。
 - 受け入れテストは明示指示時のみ `acceptance-test` を使い、planner票をそのまま渡す。
 - 受け入れテストだけを行う場合、対象仕様または機能が分かればplannerにテスト票を作らせる。完全なテスト票が提示済みならplannerを省略する。対象不明なら全件走査せずユーザーへ確認する。実装担当は起動しない。
 - テストFAILが実装バグなら報告を添えてCodexへ戻し、設計・仕様の問題だけplannerへ戻す。
