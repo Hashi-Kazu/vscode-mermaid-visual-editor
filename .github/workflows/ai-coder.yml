@@ -41,10 +41,13 @@ jobs:
               - エントリポイントは `src/extension.ts`
               - パネル制御は `src/ganttPanel.ts`
               - スニペットは `snippets/`、文法定義は `syntaxes/`
-           3. Issue 内容が要件変更（機能追加）かコード修正のみ（バグ修正を含む）かを判断し、`docs/ai/release-policy.md` のルールに従って `package.json` の `version` を更新する
-              - 要件変更（機能追加）の場合はマイナーバージョンを上げ、`docs/requirements-usdm.md` のバージョンとも整合させる
-              - コード修正のみ（バグ修正を含む）の場合はパッチバージョンを上げる
-           4. `feature/issue-${{ github.event.issue.number }}` ブランチを作成し、バージョン更新を含む変更をコミットする
+           3. コミット前に `package.json` の `version` を確認し、必要に応じて更新する
+              - 判定基準は `docs/ai/release-policy.md` の「バージョンポリシー」に従う
+                - 要件変更あり（`docs/requirements-usdm.md` の仕様内容に変更が生じる修正） → マイナーアップ
+                - コード修正のみ（バグ修正・リファクタ等、要件変更を伴わない） → パッチアップ
+              - 要件変更を行った場合は `docs/requirements-usdm.md` 冒頭の「バージョン」「最終更新」欄と `package.json` の `version` を同じ値に揃える
+              - Marketplace は同一バージョンの再公開ができないため、変更内容が些少でも必ずいずれかのアップを行う
+           4. `feature/issue-${{ github.event.issue.number }}` ブランチを作成して変更をコミットする
               - コミットメッセージは日本語で簡潔に（例: `feat: ○○機能を追加 (#${{ github.event.issue.number }})`）
            5. main ブランチへの draft PR を作成する
               - PR タイトル: `feat: ${{ github.event.issue.title }}`
@@ -52,10 +55,10 @@ jobs:
 
            ## 注意事項
 
-           - `CLAUDE.md` はコード構成・規約の参照用として読むこと
-           - `.claude/agents/` のエージェント定義（feature-dev.md 等）を参照し、実装規約に従うこと
+           - `CLAUDE.md` はコード構成・規約の参照用として読み、エージェント定義（`.claude/agents/`）に従って実装すること
            - `dist/` は編集しない（ビルド出力のため）
            - コメントは WHY が非自明な場合のみ書く
+           - バージョンポリシーの詳細は `docs/ai/release-policy.md` を参照する
          claude_args: |
            --max-turns 100
            --dangerously-skip-permissions
