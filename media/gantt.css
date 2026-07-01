@@ -309,7 +309,7 @@ body {
 /* Status colours */
 .status-default { background: var(--vscode-charts-blue);   color: #fff; }
 .status-done    { background: var(--vscode-charts-green);  color: #fff; }
-.status-active  { background: var(--vscode-charts-yellow); color: #000; }
+.status-active  { background: var(--vscode-charts-orange, #d18616); color: #fff; }
 /* Legacy: kept for documents that still have `crit` as sole status keyword */
 .status-crit    { background: var(--vscode-charts-red);    color: #fff; }
 
