@@ -22,9 +22,8 @@
   const UNDO_LIMIT   = 50;
 
   /* ビュー全体の拡大縮小（タスクバー範囲のpx/日ズームとは独立）。
-     #gantt-grid に CSS `zoom` を適用し、行の高さ・フォント・ラベル列幅を含む
-     表示全体を一律に拡大縮小する。マウス座標（clientX/Y）は常に実画面px基準の
-     ため、pxPerDay 等のローカル座標系と混在する箇所は viewZoom で換算する。 */
+     sticky 要素と CSS `zoom` の座標系不整合を避けるため、表示寸法を通常の
+     レイアウト座標へ換算する。マウス座標（clientX/Y）も同じ実画面px基準となる。 */
   const VIEW_ZOOM_MIN  = 0.5;
   const VIEW_ZOOM_MAX  = 2;
   const VIEW_ZOOM_STEP = 0.1;
@@ -113,7 +112,15 @@
   }
 
   function dateToX(dateStr) {
-    return diffDays(fmtDate(rangeStart), dateStr) * pxPerDay;
+    return diffDays(fmtDate(rangeStart), dateStr) * displayPpd();
+  }
+
+  function displaySize(value) {
+    return value * viewZoom;
+  }
+
+  function displayPpd() {
+    return displaySize(pxPerDay);
   }
 
   /* 全タスクの全期間がビューに収まる px/日（縮小下限の算出に使用）。
@@ -123,8 +130,7 @@
     const container = document.getElementById('scroll-container');
     const { min, max } = calcRange(ganttData);
     const totalDays = Math.max(1, diffDays(fmtDate(min), fmtDate(max)));
-    // container.clientWidth はビューズーム適用前の実画面px。pxPerDay はローカル
-    // 座標系（#gantt-grid の zoom 適用前）の値なので viewZoom で換算する。
+    // pxPerDay は論理値なので、表示領域を viewZoom で論理座標へ戻して算出する。
     const avail = (container ? container.clientWidth / viewZoom : 0) - LABEL_W;
     if (avail <= 0) return MIN_PPD;
     // 全期間が収まる px/日。MIN_PPD より小さくなる場合のみ下限を緩める。
@@ -170,7 +176,25 @@
 
     const grid = document.getElementById('gantt-grid');
     grid.innerHTML = '';
-    grid.style.zoom = String(viewZoom);
+    grid.style.setProperty('--label-w', displaySize(LABEL_W) + 'px');
+    grid.style.setProperty('--header-h', displaySize(HEADER_H) + 'px');
+    grid.style.setProperty('--month-h', displaySize(26) + 'px');
+    grid.style.setProperty('--day-h', displaySize(30) + 'px');
+    grid.style.setProperty('--section-h', displaySize(SECTION_H) + 'px');
+    grid.style.setProperty('--row-h', displaySize(ROW_H) + 'px');
+    grid.style.setProperty('--bar-h', displaySize(BAR_H) + 'px');
+    grid.style.setProperty('--bar-top', displaySize(BAR_TOP) + 'px');
+    grid.style.setProperty('--diamond-size', displaySize(DIAMOND_SIZE) + 'px');
+    grid.style.setProperty('--resize-w', displaySize(RESIZE_W) + 'px');
+    grid.style.setProperty('--label-padding', displaySize(10) + 'px');
+    grid.style.setProperty('--font-10', displaySize(10) + 'px');
+    grid.style.setProperty('--font-11', displaySize(11) + 'px');
+    grid.style.setProperty('--font-12', displaySize(12) + 'px');
+    grid.style.setProperty('--font-14', displaySize(14) + 'px');
+    grid.style.setProperty('--crit-size', displaySize(18) + 'px');
+    grid.style.setProperty('--status-indicator-w', displaySize(10) + 'px');
+    grid.style.setProperty('--bar-padding-end', displaySize(8) + 'px');
+    grid.style.setProperty('--bar-padding-start', displaySize(16) + 'px');
 
     const { min, max } = calcRange(ganttData);
     rangeStart = min;
@@ -180,8 +204,8 @@
       pxPerDay = Math.max(MIN_PPD, avail > 0 ? Math.min(DEF_PPD, avail / totalDays) : DEF_PPD);
       autoFitPpd = false;
     }
-    const tlW = Math.ceil(totalDays * pxPerDay);
-    grid.style.setProperty('--cell-w', pxPerDay + 'px');
+    const tlW = Math.ceil(totalDays * displayPpd());
+    grid.style.setProperty('--cell-w', displayPpd() + 'px');
 
     clampSelection();
     renderHeader(grid, min, max, tlW);
@@ -219,7 +243,7 @@
 
     while (cur < end) {
       if (!curMonthEl || cur.getDate() === 1) {
-        if (curMonthEl) curMonthEl.style.width = (curMonthDays * pxPerDay) + 'px';
+        if (curMonthEl) curMonthEl.style.width = (curMonthDays * displayPpd()) + 'px';
         curMonthEl = el('div', 'month-cell');
         curMonthEl.textContent = `${cur.getFullYear()}/${p2(cur.getMonth()+1)}`;
         monthRow.appendChild(curMonthEl);
@@ -227,14 +251,14 @@
       }
       curMonthDays++;
       const dayCell = el('div', 'day-cell');
-      dayCell.style.width = pxPerDay + 'px';
+      dayCell.style.width = displayPpd() + 'px';
       const dom = cur.getDate();
       if (dom === 1 || dom % 5 === 0) dayCell.textContent = String(dom);
       if (fmtDate(cur) === todayStr) dayCell.classList.add('today');
       dayRow.appendChild(dayCell);
       cur.setDate(cur.getDate() + 1);
     }
-    if (curMonthEl) curMonthEl.style.width = (curMonthDays * pxPerDay) + 'px';
+    if (curMonthEl) curMonthEl.style.width = (curMonthDays * displayPpd()) + 'px';
 
     tlHeader.appendChild(monthRow);
     tlHeader.appendChild(dayRow);
@@ -244,7 +268,7 @@
   /* ── Section row ── */
   function renderSection(grid, sec, si, tlW) {
     const labelCell = el('div', 'gantt-cell gantt-label section-label');
-    labelCell.style.height = SECTION_H + 'px';
+    labelCell.style.height = displaySize(SECTION_H) + 'px';
     if (selected && selected.si === si && selected.ti === -1) {
       labelCell.classList.add('row-selected');
     }
@@ -294,7 +318,7 @@
 
     const tlCell = el('div', 'gantt-cell section-timeline');
     tlCell.style.width = tlW + 'px';
-    tlCell.style.height = SECTION_H + 'px';
+    tlCell.style.height = displaySize(SECTION_H) + 'px';
     if (selected && selected.si === si && selected.ti === -1) {
       tlCell.classList.add('row-selected');
     }
@@ -374,8 +398,8 @@
     if (task.status === 'milestone') {
       const x = Math.round(dateToX(task.startDate));
       const diamond = el('div', 'milestone-diamond');
-      diamond.style.left = (x - DIAMOND_SIZE / 2) + 'px';
-      diamond.style.top  = BAR_TOP + 'px';
+      diamond.style.left = (x - displaySize(DIAMOND_SIZE) / 2) + 'px';
+      diamond.style.top  = displaySize(BAR_TOP) + 'px';
       diamond.dataset.si = si;
       diamond.dataset.ti = ti;
       diamond.title = task.label;
@@ -403,14 +427,14 @@
       tlCell.appendChild(diamond);
     } else {
       const x = Math.round(dateToX(task.startDate));
-      const w = Math.max(RESIZE_W + 4, Math.round(task.duration * pxPerDay));
+      const w = Math.max(displaySize(RESIZE_W + 4), Math.round(task.duration * displayPpd()));
       // Build class list: base status class + optional crit modifier
       let barCls = 'gantt-bar status-' + (task.status || 'default');
       if (task.crit) barCls += ' crit';
       const bar = el('div', barCls);
       bar.style.left = x + 'px';
       bar.style.width = w + 'px';
-      bar.style.top   = BAR_TOP + 'px';
+      bar.style.top   = displaySize(BAR_TOP) + 'px';
       bar.dataset.si  = si;
       bar.dataset.ti  = ti;
       bar.title = task.label;
@@ -498,18 +522,17 @@
       else showGhost('リサイズ中');
     }
 
-    // dx は実画面px（マウス移動量）。#gantt-grid はビューズームで拡大縮小されて
-    // いるため、ローカル座標系（pxPerDay基準）に戻すには viewZoom で割る。
+    // dx と表示上の px/日は、どちらも実画面px基準。
     if (type === 'move') {
       const days = Math.round(dx / (pxPerDay * viewZoom));
       const newDate = addDays(origDate, days);
       const newX = Math.round(dateToX(newDate));
-      bar.style.left = (isMilestone ? newX - DIAMOND_SIZE / 2 : newX) + 'px';
+      bar.style.left = (isMilestone ? newX - displaySize(DIAMOND_SIZE) / 2 : newX) + 'px';
       updateGhost(newDate);
     } else {
       const days = Math.round(dx / (pxPerDay * viewZoom));
       const newDur = Math.max(1, origDur + days);
-      bar.style.width = Math.max(RESIZE_W + 4, Math.round(newDur * pxPerDay)) + 'px';
+      bar.style.width = Math.max(displaySize(RESIZE_W + 4), Math.round(newDur * displayPpd())) + 'px';
       updateGhost(newDur + '日');
     }
   }
@@ -1649,16 +1672,14 @@
   });
 
   /* ── Wheel zoom (Ctrl+wheel) / scroll (plain wheel) ──
-     範囲（px/日）ズーム。実画面px（clientX・scrollLeft）とローカル座標系
-     （pxPerDay・LABEL_W）が混在するため viewZoom で相互に換算する。 */
+     範囲（px/日）ズーム。カーソル位置の日付を表示座標から算出して維持する。 */
   document.getElementById('scroll-container').addEventListener('wheel', e => {
     if (!e.ctrlKey) return; // plain wheel → browser default scroll
     e.preventDefault();
     const container = e.currentTarget;
     const rect = container.getBoundingClientRect();
-    const contentX = e.clientX - rect.left + container.scrollLeft; // 実画面px
-    const mouseXLocal = contentX / viewZoom - LABEL_W;
-    const dayAtCursor = mouseXLocal / pxPerDay;
+    const contentX = e.clientX - rect.left + container.scrollLeft;
+    const dayAtCursor = (contentX - displaySize(LABEL_W)) / displayPpd();
     const factor = e.deltaY < 0 ? 1.15 : (1 / 1.15);
     const newPPD = Math.max(fitFloorPpd(), Math.min(MAX_PPD, pxPerDay * factor));
     if (Math.abs(newPPD - pxPerDay) < 0.01) return;
