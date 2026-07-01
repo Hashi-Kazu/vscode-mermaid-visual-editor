@@ -195,6 +195,12 @@ body {
   background: color-mix(in srgb, var(--vscode-list-activeSelectionBackground, var(--vscode-focusBorder)) 25%, transparent);
   box-shadow: inset 2px 0 0 0 var(--vscode-focusBorder);
 }
+/* sticky なラベル列は不透明背景を維持する。汎用 .row-selected の半透明背景を
+   そのまま使うと、横スクロールでラベル下に潜り込んだタスクバーが透けて見え、
+   選択行だけラベルとバーが重なって見える不具合になるため。 */
+.gantt-label.row-selected {
+  background: color-mix(in srgb, var(--vscode-list-activeSelectionBackground, var(--vscode-focusBorder)) 25%, var(--vscode-editor-background));
+}
 .section-label.row-selected {
   background: color-mix(in srgb, var(--vscode-list-activeSelectionBackground, var(--vscode-focusBorder)) 35%, var(--vscode-editor-background));
 }
