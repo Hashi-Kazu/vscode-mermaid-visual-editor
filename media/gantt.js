@@ -123,6 +123,15 @@
     return displaySize(pxPerDay);
   }
 
+  /* R-G10-08: 非整数 devicePixelRatio（例: Windows 125%拡大）環境で、
+     ラベル列(sticky)とタスクバーのインラインpx座標のスナップ位置が
+     一致しないことによる境界のズレを防ぐため、CSS px値を一旦物理pxへ
+     変換して丸めてからCSS pxへ戻す。dpr===1（100%拡大）では実質無効。 */
+  function snapToDpr(value) {
+    const dpr = window.devicePixelRatio || 1;
+    return Math.round(value * dpr) / dpr;
+  }
+
   /* 全タスクの全期間がビューに収まる px/日（縮小下限の算出に使用）。
      R-G10-07: ズームアウト下限を、全期間が一望できる倍率まで緩和する。 */
   function fitFloorPpd() {
@@ -176,7 +185,7 @@
 
     const grid = document.getElementById('gantt-grid');
     grid.innerHTML = '';
-    grid.style.setProperty('--label-w', displaySize(LABEL_W) + 'px');
+    grid.style.setProperty('--label-w', snapToDpr(displaySize(LABEL_W)) + 'px');
     grid.style.setProperty('--header-h', displaySize(HEADER_H) + 'px');
     grid.style.setProperty('--month-h', displaySize(26) + 'px');
     grid.style.setProperty('--day-h', displaySize(30) + 'px');
@@ -387,7 +396,7 @@
     const todayX = dateToX(fmtDate(new Date()));
     if (todayX >= 0 && todayX <= tlW) {
       const marker = el('div', 'today-line');
-      marker.style.left = todayX + 'px';
+      marker.style.left = snapToDpr(todayX) + 'px';
       tlCell.appendChild(marker);
     }
 
@@ -398,8 +407,8 @@
     if (task.status === 'milestone') {
       const x = Math.round(dateToX(task.startDate));
       const diamond = el('div', 'milestone-diamond');
-      diamond.style.left = (x - displaySize(DIAMOND_SIZE) / 2) + 'px';
-      diamond.style.top  = displaySize(BAR_TOP) + 'px';
+      diamond.style.left = snapToDpr(x - displaySize(DIAMOND_SIZE) / 2) + 'px';
+      diamond.style.top  = snapToDpr(displaySize(BAR_TOP)) + 'px';
       diamond.dataset.si = si;
       diamond.dataset.ti = ti;
       diamond.title = task.label;
@@ -432,9 +441,9 @@
       let barCls = 'gantt-bar status-' + (task.status || 'default');
       if (task.crit) barCls += ' crit';
       const bar = el('div', barCls);
-      bar.style.left = x + 'px';
-      bar.style.width = w + 'px';
-      bar.style.top   = displaySize(BAR_TOP) + 'px';
+      bar.style.left = snapToDpr(x) + 'px';
+      bar.style.width = snapToDpr(w) + 'px';
+      bar.style.top   = snapToDpr(displaySize(BAR_TOP)) + 'px';
       bar.dataset.si  = si;
       bar.dataset.ti  = ti;
       bar.title = task.label;
@@ -527,12 +536,12 @@
       const days = Math.round(dx / (pxPerDay * viewZoom));
       const newDate = addDays(origDate, days);
       const newX = Math.round(dateToX(newDate));
-      bar.style.left = (isMilestone ? newX - displaySize(DIAMOND_SIZE) / 2 : newX) + 'px';
+      bar.style.left = snapToDpr(isMilestone ? newX - displaySize(DIAMOND_SIZE) / 2 : newX) + 'px';
       updateGhost(newDate);
     } else {
       const days = Math.round(dx / (pxPerDay * viewZoom));
       const newDur = Math.max(1, origDur + days);
-      bar.style.width = Math.max(displaySize(RESIZE_W + 4), Math.round(newDur * displayPpd())) + 'px';
+      bar.style.width = snapToDpr(Math.max(displaySize(RESIZE_W + 4), Math.round(newDur * displayPpd()))) + 'px';
       updateGhost(newDur + '日');
     }
   }

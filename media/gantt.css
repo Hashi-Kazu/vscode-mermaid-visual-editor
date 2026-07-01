@@ -106,6 +106,9 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* R-G10-08: 非整数devicePixelRatio環境でのsubpixelレンダリングのブレを抑え、
+     タイムライン列（JS側で物理px丸め済み）との境界ズレを軽減する。 */
+  transform: translateZ(0);
 }
 
 /* ── Header (sticky top) ── */
