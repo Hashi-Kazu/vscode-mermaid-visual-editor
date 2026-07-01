@@ -21,6 +21,15 @@
   const PAD_DAYS     = 7;
   const UNDO_LIMIT   = 50;
 
+  /* ビュー全体の拡大縮小（タスクバー範囲のpx/日ズームとは独立）。
+     #gantt-grid に CSS `zoom` を適用し、行の高さ・フォント・ラベル列幅を含む
+     表示全体を一律に拡大縮小する。マウス座標（clientX/Y）は常に実画面px基準の
+     ため、pxPerDay 等のローカル座標系と混在する箇所は viewZoom で換算する。 */
+  const VIEW_ZOOM_MIN  = 0.5;
+  const VIEW_ZOOM_MAX  = 2;
+  const VIEW_ZOOM_STEP = 0.1;
+  const DEF_VIEW_ZOOM  = 1;
+
   /* ── State ── */
   let ganttData    = null;
   let undoStack    = [];
@@ -32,6 +41,7 @@
   let reorderState = null;
   let rowIndex     = [];
   let autoFitPpd   = true;
+  let viewZoom     = DEF_VIEW_ZOOM;
   let deleteTarget = null;  // { si, ti } — ti=-1 means section
   let selected     = null;  // { si, ti } — クリックで確定した選択。ti=-1 はセクション選択
   const collapsedSections = new Set();
@@ -113,7 +123,9 @@
     const container = document.getElementById('scroll-container');
     const { min, max } = calcRange(ganttData);
     const totalDays = Math.max(1, diffDays(fmtDate(min), fmtDate(max)));
-    const avail = (container ? container.clientWidth : 0) - LABEL_W;
+    // container.clientWidth はビューズーム適用前の実画面px。pxPerDay はローカル
+    // 座標系（#gantt-grid の zoom 適用前）の値なので viewZoom で換算する。
+    const avail = (container ? container.clientWidth / viewZoom : 0) - LABEL_W;
     if (avail <= 0) return MIN_PPD;
     // 全期間が収まる px/日。MIN_PPD より小さくなる場合のみ下限を緩める。
     return Math.max(HARD_MIN_PPD, Math.min(MIN_PPD, avail / totalDays));
@@ -158,12 +170,13 @@
 
     const grid = document.getElementById('gantt-grid');
     grid.innerHTML = '';
+    grid.style.zoom = String(viewZoom);
 
     const { min, max } = calcRange(ganttData);
     rangeStart = min;
     const totalDays = diffDays(fmtDate(min), fmtDate(max));
     if (autoFitPpd) {
-      const avail = container.clientWidth - LABEL_W;
+      const avail = container.clientWidth / viewZoom - LABEL_W;
       pxPerDay = Math.max(MIN_PPD, avail > 0 ? Math.min(DEF_PPD, avail / totalDays) : DEF_PPD);
       autoFitPpd = false;
     }
@@ -485,14 +498,16 @@
       else showGhost('リサイズ中');
     }
 
+    // dx は実画面px（マウス移動量）。#gantt-grid はビューズームで拡大縮小されて
+    // いるため、ローカル座標系（pxPerDay基準）に戻すには viewZoom で割る。
     if (type === 'move') {
-      const days = Math.round(dx / pxPerDay);
+      const days = Math.round(dx / (pxPerDay * viewZoom));
       const newDate = addDays(origDate, days);
       const newX = Math.round(dateToX(newDate));
       bar.style.left = (isMilestone ? newX - DIAMOND_SIZE / 2 : newX) + 'px';
       updateGhost(newDate);
     } else {
-      const days = Math.round(dx / pxPerDay);
+      const days = Math.round(dx / (pxPerDay * viewZoom));
       const newDur = Math.max(1, origDur + days);
       bar.style.width = Math.max(RESIZE_W + 4, Math.round(newDur * pxPerDay)) + 'px';
       updateGhost(newDur + '日');
@@ -514,7 +529,7 @@
     const { si, ti, type, startX, origDate, origDur } = dragState;
     const task  = ganttData.sections[si].tasks[ti];
     const dx    = e.clientX - startX;
-    const days  = Math.round(dx / pxPerDay);
+    const days  = Math.round(dx / (pxPerDay * viewZoom));
     let patch   = {};
 
     if (type === 'move') {
@@ -1633,23 +1648,46 @@
     }
   });
 
-  /* ── Wheel zoom (Ctrl+wheel) / scroll (plain wheel) ── */
+  /* ── Wheel zoom (Ctrl+wheel) / scroll (plain wheel) ──
+     範囲（px/日）ズーム。実画面px（clientX・scrollLeft）とローカル座標系
+     （pxPerDay・LABEL_W）が混在するため viewZoom で相互に換算する。 */
   document.getElementById('scroll-container').addEventListener('wheel', e => {
     if (!e.ctrlKey) return; // plain wheel → browser default scroll
     e.preventDefault();
     const container = e.currentTarget;
     const rect = container.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left + container.scrollLeft - LABEL_W;
-    const dayAtCursor = mouseX / pxPerDay;
+    const contentX = e.clientX - rect.left + container.scrollLeft; // 実画面px
+    const mouseXLocal = contentX / viewZoom - LABEL_W;
+    const dayAtCursor = mouseXLocal / pxPerDay;
     const factor = e.deltaY < 0 ? 1.15 : (1 / 1.15);
     const newPPD = Math.max(fitFloorPpd(), Math.min(MAX_PPD, pxPerDay * factor));
     if (Math.abs(newPPD - pxPerDay) < 0.01) return;
-    const newScrollLeft = Math.round(dayAtCursor * newPPD) - (e.clientX - rect.left) + LABEL_W;
     pxPerDay = newPPD;
     autoFitPpd = false;
     render();
+    const newScrollLeft = Math.round((dayAtCursor * newPPD + LABEL_W) * viewZoom) - (e.clientX - rect.left);
     container.scrollLeft = Math.max(0, newScrollLeft);
   }, { passive: false });
+
+  /* ── View zoom (ビュー全体の拡大縮小、範囲ズームとは独立) ── */
+  function setViewZoom(next) {
+    if (!ganttData) return;
+    const clamped = Math.max(VIEW_ZOOM_MIN, Math.min(VIEW_ZOOM_MAX, Math.round(next * 100) / 100));
+    if (clamped === viewZoom) return;
+    viewZoom = clamped;
+    document.getElementById('btn-view-zoom-reset').textContent = Math.round(viewZoom * 100) + '%';
+    render();
+  }
+
+  document.getElementById('btn-view-zoom-in').addEventListener('click', () => {
+    setViewZoom(viewZoom + VIEW_ZOOM_STEP);
+  });
+  document.getElementById('btn-view-zoom-out').addEventListener('click', () => {
+    setViewZoom(viewZoom - VIEW_ZOOM_STEP);
+  });
+  document.getElementById('btn-view-zoom-reset').addEventListener('click', () => {
+    setViewZoom(DEF_VIEW_ZOOM);
+  });
 
   /* ── Toolbar buttons ── */
   document.getElementById('btn-add-task').addEventListener('click', () => {

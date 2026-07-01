@@ -695,6 +695,11 @@ export class EditorPanel {
     <button id="btn-undo">↩ 元に戻す</button>
     <button id="btn-reset">⟳ リセット</button>
     <span class="toolbar-sep"></span>
+    <label class="toolbar-label">表示倍率</label>
+    <button id="btn-view-zoom-out" title="ビュー全体を縮小">－</button>
+    <button id="btn-view-zoom-reset" title="表示倍率をリセット (100%)">100%</button>
+    <button id="btn-view-zoom-in" title="ビュー全体を拡大">＋</button>
+    <span class="toolbar-sep"></span>
     <label class="toolbar-label" for="sel-axis-format">軸書式</label>
     <select id="sel-axis-format" disabled>
       <option value="">デフォルト</option>
