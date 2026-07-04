@@ -1301,7 +1301,10 @@
     if (ganttData.sections.length === 0) {
       ganttData.sections = [{ name: '', tasks: [] }];
     }
-    collapsedSections.delete(si);
+    shiftCollapsedAfterRemove(si);
+    if (selected && selected.si === si) selected = null;
+    else if (selected && selected.si > si) selected.si--;
+    clampSelection();
     vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     deleteTarget = null;
     render();
@@ -1325,6 +1328,17 @@
     if (collapsedSections.size === 0) return;
     const shifted = new Set();
     collapsedSections.forEach(i => shifted.add(i >= at ? i + 1 : i));
+    collapsedSections.clear();
+    shifted.forEach(i => collapsedSections.add(i));
+  }
+
+  // セクション削除時に collapsedSections のインデックスを補正
+  function shiftCollapsedAfterRemove(at) {
+    if (collapsedSections.size === 0) return;
+    const shifted = new Set();
+    collapsedSections.forEach(i => {
+      if (i !== at) shifted.add(i > at ? i - 1 : i);
+    });
     collapsedSections.clear();
     shifted.forEach(i => collapsedSections.add(i));
   }
@@ -1504,6 +1518,17 @@
     if (toSi > fromSi) insertSi--;
     insertSi = Math.max(0, Math.min(insertSi, ganttData.sections.length));
     ganttData.sections.splice(insertSi, 0, section);
+    const mapIndex = i => {
+      if (i === fromSi) return insertSi;
+      if (fromSi < insertSi && i > fromSi && i <= insertSi) return i - 1;
+      if (fromSi > insertSi && i >= insertSi && i < fromSi) return i + 1;
+      return i;
+    };
+    const remappedCollapsed = new Set();
+    collapsedSections.forEach(i => remappedCollapsed.add(mapIndex(i)));
+    collapsedSections.clear();
+    remappedCollapsed.forEach(i => collapsedSections.add(i));
+    if (selected) selected.si = mapIndex(selected.si);
     vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     render();
   }

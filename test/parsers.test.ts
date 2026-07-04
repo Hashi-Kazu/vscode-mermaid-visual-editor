@@ -49,6 +49,21 @@ test('parseGantt returns null for non-gantt content', () => {
   assert.equal(parseGantt('```mermaid\nflowchart TD\n    A --> B\n```'), null);
 });
 
+test('parseGantt skips a leading flowchart block and parses only the gantt block', () => {
+  const doc = '# Doc\nBody: this is not a task\n\n```mermaid\nflowchart TD\n    A --> B\n```\n\n```mermaid\ngantt\n    dateFormat YYYY-MM-DD\n    section S\n        Real task :t1, 2026-01-01, 2d\n```\n';
+  const data = parseGantt(doc)!;
+  assert.ok(data);
+  assert.deepEqual(data.sections.flatMap(section => section.tasks).map(task => task.label), ['Real task']);
+});
+
+test('parseFlowchart skips a leading gantt block and parses only the flowchart block', () => {
+  const doc = '```mermaid\ngantt\n    title G\n```\n\n```mermaid\nflowchart LR\n    X --> Y\n```\n';
+  const data = parseFlowchart(doc)!;
+  assert.ok(data);
+  assert.equal(data.direction, 'LR');
+  assert.deepEqual(data.nodes.map(node => node.id), ['X', 'Y']);
+});
+
 // ── Section name round-trip ──────────────────────────────────────────────────
 
 test('parseGantt round-trip preserves section name after rename', () => {

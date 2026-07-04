@@ -520,6 +520,41 @@ test('ganttApply updates only the gantt mermaid block and leaves other content',
   assert.match(out, /Some text after\./);
 });
 
+test('multiple blocks: ganttApply replaces only a later gantt block', () => {
+  const flowBlock = '```mermaid\nflowchart TD\n    A --> B\n```';
+  const doc = `# Doc\n\n${flowBlock}\n\nKeep this text.\n\n\`\`\`mermaid\ngantt\n    title Old\n    dateFormat YYYY-MM-DD\n\`\`\`\n`;
+  const out = ganttApply(doc, 'project.md', 'gantt\n    title New\n    dateFormat YYYY-MM-DD');
+  assert.match(out, /title New/);
+  assert.ok(out.includes(flowBlock));
+  assert.match(out, /Keep this text\./);
+});
+
+test('multiple blocks: flowApply replaces only a later flowchart block', () => {
+  const ganttBlock = '```mermaid\ngantt\n    title G\n    dateFormat YYYY-MM-DD\n```';
+  const doc = `# Doc\n\n${ganttBlock}\n\nKeep this text.\n\n\`\`\`mermaid\nflowchart TD\n    A --> B\n\`\`\`\n`;
+  const out = flowApply(doc, 'project.md', 'flowchart LR\n    X --> Y');
+  assert.match(out, /flowchart LR/);
+  assert.ok(out.includes(ganttBlock));
+  assert.match(out, /Keep this text\./);
+});
+
+test('.mmd documents keep the full-replacement behavior', () => {
+  assert.equal(ganttApply('old content', 'project.mmd', 'gantt\n    title New'), 'gantt\n    title New');
+  assert.equal(flowApply('old content', 'project.mmd', 'flowchart TD\n    A --> B'), 'flowchart TD\n    A --> B');
+});
+
+test('markdown without a mermaid fence keeps the full-replacement behavior', () => {
+  assert.equal(ganttApply('gantt\n    title Old', 'project.md', 'gantt\n    title New'), 'gantt\n    title New');
+  assert.equal(flowApply('flowchart TD\n    A --> B', 'project.md', 'flowchart LR\n    A --> B'), 'flowchart LR\n    A --> B');
+});
+
+test('markdown with fences but no matching diagram block remains unchanged', () => {
+  const flowOnly = '# Doc\n\n```mermaid\nflowchart TD\n    A --> B\n```\n';
+  const ganttOnly = '# Doc\n\n```mermaid\ngantt\n    title G\n```\n';
+  assert.equal(ganttApply(flowOnly, 'project.md', 'gantt\n    title New'), flowOnly);
+  assert.equal(flowApply(ganttOnly, 'project.md', 'flowchart LR\n    X --> Y'), ganttOnly);
+});
+
 // ── lazy-separation: subgraph / comment preservation (R-FP-02 / R-FP-03) ───────
 
 test('editNodeLabel preserves subgraph/end wrappers and comments while separating the node', () => {

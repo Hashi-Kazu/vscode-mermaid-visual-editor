@@ -210,16 +210,13 @@ export function deleteEdge(code: string, from: string, to: string, idx: number):
 /** Replace the flowchart block in a markdown document with new code. */
 export function applyToDocument(docText: string, fileName: string, newCode: string): string {
   if (fileName.endsWith('.mmd')) return newCode;
-  const replaced = docText.replace(
-    /(```mermaid[ \t]*\r?\n)([\s\S]*?)(```)/,
-    (_, open, body, close) => {
-      if (/^(flowchart|graph)\s+/im.test(body)) {
-        return open + newCode + '\n' + close;
-      }
-      return _;
-    }
+  const hasFence = /```mermaid[ \t]*\r?\n/.test(docText);
+  if (!hasFence) return newCode;
+
+  return docText.replace(
+    /(```mermaid[ \t]*\r?\n)(?=\s*(?:flowchart|graph)\s+)([\s\S]*?)(```)/i,
+    (_, open, _body, close) => open + newCode + '\n' + close
   );
-  return replaced !== docText ? replaced : newCode;
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────

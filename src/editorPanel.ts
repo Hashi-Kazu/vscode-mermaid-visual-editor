@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { parseGantt } from './ganttParser';
 import { ganttToCode, applyToDocument as ganttApply } from './ganttSerializer';
-import { parseFlowchart } from './flowchartParser';
+import { parseFlowchart, getFlowchartBlock } from './flowchartParser';
 import { detectConflict, normalizeText } from './conflictDetection';
 import {
   setDirection, editNodeLabel, addNode, deleteNode,
@@ -112,6 +112,10 @@ export class EditorPanel {
       null,
       this._disposables
     );
+
+    this._disposables.push(vscode.window.onDidChangeActiveColorTheme(() => {
+      if (this._type === 'flowchart') this._sendFlowchartUpdate();
+    }));
 
     this._bindDocumentListener();
   }
@@ -368,33 +372,42 @@ export class EditorPanel {
   }
 
   private _extractRawCode(docText: string): string {
-    const m = docText.match(/```mermaid\s*\n([\s\S]*?)```/);
-    if (m && /^(flowchart|graph)\s+/im.test(m[1])) return m[1].trim();
+    const block = getFlowchartBlock(docText);
+    if (block) {
+      const match = docText.slice(block.start, block.end).match(/```mermaid[ \t]*\r?\n([\s\S]*?)```/);
+      return match![1].trim();
+    }
+    if (/```mermaid[ \t]*\r?\n/.test(docText)) return '';
     return docText.trim();
   }
 
   private async _flowOp(transform: (code: string) => string): Promise<void> {
-    const text = this._document.getText();
-    const rawCode = this._extractRawCode(text);
-    const newRaw = transform(rawCode);
-    if (newRaw === rawCode) return;
-    const newDoc = flowApply(text, this._document.fileName, newRaw);
-    this._enqueueWrite(newDoc);
+    this._enqueueFlow(transform);
   }
 
   private async _addFlowNode(): Promise<void> {
-    const text = this._document.getText();
-    const rawCode = this._extractRawCode(text);
-    const { code: newRaw, nodeId } = addNode(rawCode);
-    const newDoc = flowApply(text, this._document.fileName, newRaw);
-    this._enqueueWrite(newDoc);
-    this._panel.webview.postMessage({ type: 'startEditNode', nodeId });
+    this._enqueueFlow(rawCode => {
+      const { code, nodeId } = addNode(rawCode);
+      this._panel.webview.postMessage({ type: 'startEditNode', nodeId });
+      return code;
+    });
   }
 
   private async _applyFlowRaw(newRaw: string): Promise<void> {
-    const text = this._document.getText();
-    const newDoc = flowApply(text, this._document.fileName, newRaw);
-    this._enqueueWrite(newDoc);
+    this._enqueueFlow(() => newRaw);
+  }
+
+  private _enqueueFlow(transform: (code: string) => string): void {
+    this._applyQueue = this._applyQueue
+      .then(async () => {
+        const text = this._document.getText();
+        const rawCode = this._extractRawCode(text);
+        const newRaw = transform(rawCode);
+        if (newRaw === rawCode) return;
+        const newDoc = flowApply(text, this._document.fileName, newRaw);
+        await this._doWrite(newDoc);
+      })
+      .catch(() => { /* keep queue alive */ });
   }
 
   private async _handleExport(format: 'svg' | 'png', data: string): Promise<void> {

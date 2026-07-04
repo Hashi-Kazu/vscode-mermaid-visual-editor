@@ -40,15 +40,11 @@ function serializeTask(t: GanttTask): string {
 export function applyToDocument(docText: string, fileName: string, newGanttCode: string): string {
   if (fileName.endsWith('.mmd')) return newGanttCode;
 
-  // Replace the first ```mermaid block that starts with gantt
-  const replaced = docText.replace(
-    /(```mermaid[ \t]*\r?\n)([\s\S]*?)(```)/,
-    (_, open, body, close) => {
-      if (body.trimStart().startsWith('gantt')) {
-        return open + newGanttCode + '\n' + close;
-      }
-      return _ ;
-    }
+  const hasFence = /```mermaid[ \t]*\r?\n/.test(docText);
+  if (!hasFence) return newGanttCode;
+
+  return docText.replace(
+    /(```mermaid[ \t]*\r?\n)(?=\s*gantt\b)([\s\S]*?)(```)/i,
+    (_, open, _body, close) => open + newGanttCode + '\n' + close
   );
-  return replaced !== docText ? replaced : newGanttCode;
 }

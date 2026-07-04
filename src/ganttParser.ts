@@ -6,13 +6,24 @@ const STATUS_WORDS = ['done', 'active', 'milestone'] as const;
 const CRIT_WORD = 'crit';
 
 export function parseGantt(text: string): GanttData | null {
-  // Support both raw .mmd and ```mermaid blocks inside .md
-  let code = text;
-  const blockMatch = text.match(/```mermaid\s*\n([\s\S]*?)```/);
-  if (blockMatch && blockMatch[1].trimStart().startsWith('gantt')) {
-    code = blockMatch[1];
+  const block = getGanttBlock(text);
+  if (block) {
+    const match = text.slice(block.start, block.end).match(/```mermaid[ \t]*\r?\n([\s\S]*?)```/);
+    return parseGanttCode(match![1]);
   }
-  return parseGanttCode(code);
+  if (/```mermaid[ \t]*\r?\n/.test(text)) return null;
+  return parseGanttCode(text);
+}
+
+export function getGanttBlock(text: string): { start: number; end: number } | null {
+  const re = /```mermaid[ \t]*\r?\n([\s\S]*?)```/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    if (/^\s*gantt\b/i.test(match[1])) {
+      return { start: match.index, end: match.index + match[0].length };
+    }
+  }
+  return null;
 }
 
 function parseGanttCode(code: string): GanttData | null {

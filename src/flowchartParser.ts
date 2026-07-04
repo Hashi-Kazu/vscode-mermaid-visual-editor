@@ -1,15 +1,13 @@
 import { FlowchartData, FlowchartNode, FlowchartEdge, EdgeStyle, NodeShape } from './types';
 
 export function parseFlowchart(text: string): FlowchartData | null {
-  let code = text.trim();
-  const blockMatch = text.match(/```mermaid\s*\n([\s\S]*?)```/);
-  if (blockMatch) {
-    const inner = blockMatch[1].trim();
-    if (/^(flowchart|graph)\s+/i.test(inner)) {
-      code = inner;
-    }
+  const block = getFlowchartBlock(text);
+  if (block) {
+    const match = text.slice(block.start, block.end).match(/```mermaid[ \t]*\r?\n([\s\S]*?)```/);
+    return parseCode(match![1].trim());
   }
-  return parseCode(code);
+  if (/```mermaid[ \t]*\r?\n/.test(text)) return null;
+  return parseCode(text.trim());
 }
 
 function parseCode(code: string): FlowchartData | null {
@@ -121,10 +119,10 @@ function extractNode(token: string): { id: string; label: string; shape: NodeSha
 }
 
 export function getFlowchartBlock(text: string): { start: number; end: number } | null {
-  const re = /```mermaid[ \t]*\n([\s\S]*?)```/g;
-  let match;
+  const re = /```mermaid[ \t]*\r?\n([\s\S]*?)```/g;
+  let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
-    if (/^(flowchart|graph)\s+/im.test(match[1])) {
+    if (/^\s*(flowchart|graph)\s+/i.test(match[1])) {
       return { start: match.index, end: match.index + match[0].length };
     }
   }
