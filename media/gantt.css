@@ -315,7 +315,10 @@ body {
 /* Status colours */
 .status-default { background: var(--vscode-charts-blue);   color: #fff; }
 .status-done    { background: var(--vscode-charts-green);  color: #fff; }
-.status-active  { background: var(--vscode-charts-orange, #d18616); color: #fff; }
+/* charts.orange resolves through minimap.findMatchHighlight to an ~33%-alpha
+   orange (VS Code's search-match overlay color), which reads as semi-transparent
+   and low-contrast, especially in light themes. Use a fixed solid orange instead. */
+.status-active  { background: #d18616; color: #fff; }
 /* Legacy: kept for documents that still have `crit` as sole status keyword */
 .status-crit    { background: var(--vscode-charts-red);    color: #fff; }
 
