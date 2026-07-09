@@ -142,6 +142,35 @@
     return displaySize(pxPerDay);
   }
 
+  /* バー内に収まるかどうかの判定用にテキスト幅を計測する。DOM計測(offsetWidth等)は
+     layout thrash を招くため、canvas 2d context での測定に統一する。 */
+  let measureCanvas = null;
+  function measureTextWidth(text, fontPx) {
+    if (!measureCanvas) measureCanvas = document.createElement('canvas');
+    const ctx = measureCanvas.getContext('2d');
+    ctx.font = `${fontPx}px var(--vscode-font-family, sans-serif)`;
+    return ctx.measureText(text).width;
+  }
+
+  /* バー/ダイヤモンドの右側外側に表示するラベル要素を生成して追加する。
+     pointer-events:none とし、既存のドラッグ/パン/編集イベントに影響しない。
+     チャート右端(tlW)を超える場合のみ text-overflow:ellipsis でクランプする。 */
+  function appendExternalLabel(tlCell, text, left, top, tlW) {
+    const label = el('span', 'gantt-ext-label');
+    label.textContent = text;
+    label.style.left = snapToDpr(left) + 'px';
+    label.style.top  = snapToDpr(top) + 'px';
+    const fontPx = displaySize(11);
+    const textW = measureTextWidth(text, fontPx);
+    const remaining = tlW - left;
+    if (textW > remaining) {
+      label.classList.add('gantt-ext-label-clamped');
+      label.style.maxWidth = Math.max(0, remaining) + 'px';
+    }
+    tlCell.appendChild(label);
+    return label;
+  }
+
   /* R-G10-08: 非整数 devicePixelRatio（例: Windows 125%拡大）環境で、
      ラベル列(sticky)とタスクバーのインラインpx座標のスナップ位置が
      一致しないことによる境界のズレを防ぐため、CSS px値を一旦物理pxへ
@@ -248,6 +277,7 @@
 
     container.scrollLeft = scrollLeft;
     container.scrollTop  = scrollTop;
+    renderExcludedBands();
     drawDependencyArrows();
   }
 
@@ -458,6 +488,11 @@
       diamond.addEventListener('mouseenter', () => { deleteTarget = { si, ti }; });
 
       tlCell.appendChild(diamond);
+
+      // マイルストーンはダイヤモンド内にテキストを表示するスペースがないため、
+      // 常に右側外側にラベルを表示する。
+      const diamondRight = x + displaySize(DIAMOND_SIZE) / 2;
+      appendExternalLabel(tlCell, task.label, diamondRight + displaySize(4), displaySize(BAR_TOP), tlW);
     } else {
       const x = Math.round(dateToX(task.startDate));
       const w = Math.max(displaySize(RESIZE_W + 4), Math.round(task.duration * displayPpd()));
@@ -487,7 +522,16 @@
       bar.appendChild(indicator);
 
       const barLabel = el('span', 'bar-label');
-      barLabel.textContent = task.label;
+      // バー内の実効幅（左右パディングを除く）にタスク名が収まるかを事前計測し、
+      // 収まらない場合はバー内は空のままにしてバー右側外側にラベルを表示する。
+      const fontPx = displaySize(11);
+      const innerW = w - displaySize(16 + 8);
+      const textW = measureTextWidth(task.label, fontPx);
+      if (textW <= innerW) {
+        barLabel.textContent = task.label;
+      } else {
+        appendExternalLabel(tlCell, task.label, x + w + displaySize(4), displaySize(BAR_TOP), tlW);
+      }
       bar.appendChild(barLabel);
 
       const handle = el('div', 'resize-handle');
@@ -1011,6 +1055,58 @@
       path.setAttribute('marker-end', 'url(#dep-arrowhead)');
       svg.appendChild(path);
     });
+  }
+
+  /* ── Excluded date bands (weekends / excludes) ──
+     R-G18-03: ヘッダーのみに反映されていた除外日グレーアウトを、セクション/タスク行の
+     タイムライン領域にも拡張する。行ごとに背景を塗るのではなく、drawDependencyArrows()
+     と同様に #scroll-container へ1枚のオーバーレイをかぶせ、render() のたびに再構築する。 */
+  function renderExcludedBands() {
+    const container = document.getElementById('scroll-container');
+    const existing = document.getElementById('excluded-bands');
+    if (existing) existing.remove();
+
+    if (!ganttData || !ganttData.excludes || ganttData.excludes.length === 0) return;
+
+    const { min, max } = calcRange(ganttData);
+
+    // 連続する除外日をまとめて区間化する。
+    const bands = [];
+    let cur = new Date(min);
+    let bandStart = null, bandDays = 0;
+    while (cur < max) {
+      const dateStr = fmtDate(cur);
+      if (isExcludedDate(dateStr)) {
+        if (bandStart === null) bandStart = dateStr;
+        bandDays++;
+      } else if (bandStart !== null) {
+        bands.push({ start: bandStart, days: bandDays });
+        bandStart = null;
+        bandDays = 0;
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+    if (bandStart !== null) bands.push({ start: bandStart, days: bandDays });
+
+    if (bands.length === 0) return;
+
+    const grid = document.getElementById('gantt-grid');
+    const overlay = el('div', '');
+    overlay.id = 'excluded-bands';
+    const labelLeft = snapToDpr(displaySize(labelW));
+    const top = displaySize(HEADER_H);
+    const height = grid.scrollHeight - top;
+
+    bands.forEach(({ start, days }) => {
+      const band = el('div', 'excluded-band');
+      band.style.left   = (labelLeft + dateToX(start)) + 'px';
+      band.style.top    = top + 'px';
+      band.style.width  = (days * displayPpd()) + 'px';
+      band.style.height = height + 'px';
+      overlay.appendChild(band);
+    });
+
+    container.appendChild(overlay);
   }
 
   /* ── Date/duration edit popup ── */

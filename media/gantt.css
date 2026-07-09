@@ -334,6 +334,23 @@ body.label-resizing * {
   flex: 1;
 }
 
+/* ── External label (overflow labels for bars/milestones) ── */
+.gantt-ext-label {
+  position: absolute;
+  height: var(--bar-h, 24px);
+  display: flex;
+  align-items: center;
+  font-size: var(--font-11, 11px);
+  white-space: nowrap;
+  color: var(--vscode-foreground);
+  pointer-events: none;
+  z-index: 2;
+}
+.gantt-ext-label-clamped {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Status colours */
 .status-default { background: #6a5a99; color: #f8f7ff; }
 .status-done    { background: #7a7a7a; color: #fff; }
@@ -511,6 +528,17 @@ body.label-resizing * {
   user-select: none;
 }
 .collapse-toggle:hover { opacity: 1; }
+
+/* ── Excluded date bands (holiday grayout, extended to row bodies) ── */
+#excluded-bands {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.excluded-band {
+  position: absolute;
+  background: color-mix(in srgb, var(--vscode-editor-background) 80%, var(--vscode-foreground) 20%);
+}
 
 /* ── Dependency arrows SVG overlay ── */
 #dep-arrows {
