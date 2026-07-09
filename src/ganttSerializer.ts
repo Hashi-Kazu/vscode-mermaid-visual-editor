@@ -5,6 +5,7 @@ export function ganttToCode(data: GanttData): string {
   if (data.title)      lines.push(`    title ${data.title}`);
   lines.push(`    dateFormat ${data.dateFormat || 'YYYY-MM-DD'}`);
   if (data.axisFormat) lines.push(`    axisFormat ${data.axisFormat}`);
+  if (data.excludes && data.excludes.length > 0) lines.push(`    excludes ${data.excludes.join(', ')}`);
 
   data.sections.forEach((section, idx) => {
     if (section.name) {

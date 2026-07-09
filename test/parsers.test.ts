@@ -178,6 +178,26 @@ test('parseGantt returns undefined axisFormat when directive is absent', () => {
   assert.equal(data.axisFormat, undefined);
 });
 
+// ── excludes parsing (R-G18) ──────────────────────────────────────────────────
+
+test('parseGantt parses excludes weekends directive', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n    excludes weekends\n    section S\n        T1 :2026-01-01, 2d\n';
+  const data = parseGantt(code)!;
+  assert.deepEqual(data.excludes, ['weekends']);
+});
+
+test('parseGantt parses excludes with weekday name and specific dates', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n    excludes weekends, 2026-08-11, monday\n    section S\n        T1 :2026-01-01, 2d\n';
+  const data = parseGantt(code)!;
+  assert.deepEqual(data.excludes, ['weekends', '2026-08-11', 'monday']);
+});
+
+test('parseGantt returns undefined excludes when directive is absent', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T1 :2026-01-01, 2d\n';
+  const data = parseGantt(code)!;
+  assert.equal(data.excludes, undefined);
+});
+
 // ── root-level tasks (no section) ─────────────────────────────────────────────
 
 test('parseGantt places pre-section tasks in leading unnamed section', () => {

@@ -50,8 +50,12 @@ function parseGanttCode(code: string): GanttData | null {
     if (t.startsWith('title '))           { data.title = t.slice(6).trim(); continue; }
     if (t.startsWith('dateFormat'))        { data.dateFormat = t.slice(10).trim(); continue; }
     if (t.startsWith('axisFormat'))        { data.axisFormat = t.slice(10).trim(); continue; }
-    if (t.startsWith('excludes') ||
-        t.startsWith('todayMarker') ||
+    if (t.startsWith('excludes')) {
+      const tokens = t.slice(8).trim().split(',').map(s => s.trim()).filter(Boolean);
+      data.excludes = [...(data.excludes ?? []), ...tokens];
+      continue;
+    }
+    if (t.startsWith('todayMarker') ||
         t.startsWith('inclusiveEndDates')) { continue; }
 
     // Match `section` followed by a space or end-of-line (prevents
