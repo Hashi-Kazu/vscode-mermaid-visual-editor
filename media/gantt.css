@@ -126,6 +126,24 @@ body {
 .gantt-corner { cursor: pointer; }
 .gantt-corner:hover { opacity: 0.85; }
 
+.label-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 40;
+}
+.label-resize-handle:hover {
+  background: color-mix(in srgb, var(--vscode-focusBorder) 45%, transparent);
+}
+body.label-resizing,
+body.label-resizing * {
+  cursor: col-resize !important;
+  user-select: none;
+}
+
 .gantt-header-timeline {
   position: sticky;
   top: 0;
@@ -267,9 +285,9 @@ body {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 1px;
+  width: 2px;
   background: var(--vscode-charts-red);
-  opacity: 0.5;
+  opacity: 0.7;
   pointer-events: none;
   z-index: 1;
 }
@@ -313,12 +331,9 @@ body {
 }
 
 /* Status colours */
-.status-default { background: var(--vscode-charts-blue);   color: #fff; }
-.status-done    { background: var(--vscode-charts-green);  color: #fff; }
-/* charts.orange resolves through minimap.findMatchHighlight to an ~33%-alpha
-   orange (VS Code's search-match overlay color), which reads as semi-transparent
-   and low-contrast, especially in light themes. Use a fixed solid orange instead. */
-.status-active  { background: #d18616; color: #fff; }
+.status-default { background: #4b3f72; color: #f8f7ff; }
+.status-done    { background: #7a7a7a; color: #fff; }
+.status-active  { background: #b9a6e0; color: #22183f; }
 /* Legacy: kept for documents that still have `crit` as sole status keyword */
 .status-crit    { background: var(--vscode-charts-red);    color: #fff; }
 
@@ -330,7 +345,7 @@ body {
   position: absolute;
   width: var(--diamond-size, 24px);
   height: var(--diamond-size, 24px);
-  background: var(--vscode-charts-purple, #b180d7);
+  background: #4b3f72;
   transform: rotate(45deg);
   cursor: grab;
   z-index: 2;
@@ -382,11 +397,11 @@ body {
   min-width: 160px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
-.pick-done    { border-left: 3px solid var(--vscode-charts-green);  }
-.pick-active  { border-left: 3px solid var(--vscode-charts-yellow); }
+.pick-done    { background: #7a7a7a; color: #fff; border-left: 3px solid #7a7a7a; }
+.pick-active  { background: #b9a6e0; color: #22183f; border-left: 3px solid #b9a6e0; }
 .pick-crit    { border-left: 3px solid var(--vscode-charts-red);    }
-.pick-default { border-left: 3px solid var(--vscode-charts-blue);   }
-.pick-current { background: var(--vscode-menu-selectionBackground); color: var(--vscode-menu-selectionForeground); }
+.pick-default { background: #4b3f72; color: #f8f7ff; border-left: 3px solid #4b3f72; }
+.pick-current { font-weight: 600; outline: 1px solid var(--vscode-focusBorder); outline-offset: -2px; }
 
 /* ── Resize handle ── */
 .resize-handle {

@@ -6,6 +6,8 @@
 
   /* ── Constants ── */
   const LABEL_W      = 200;
+  const LABEL_W_MIN  = 100;
+  const LABEL_W_MAX  = 400;
   const ROW_H        = 36;
   const SECTION_H    = 28;
   const HEADER_H     = 56;
@@ -41,6 +43,8 @@
   let rowIndex     = [];
   let autoFitPpd   = true;
   let viewZoom     = DEF_VIEW_ZOOM;
+  let labelW       = LABEL_W;
+  let labelResizeState = null;
   let deleteTarget = null;  // { si, ti } — ti=-1 means section
   let selected     = null;  // { si, ti } — クリックで確定した選択。ti=-1 はセクション選択
   const collapsedSections = new Set();
@@ -140,7 +144,7 @@
     const { min, max } = calcRange(ganttData);
     const totalDays = Math.max(1, diffDays(fmtDate(min), fmtDate(max)));
     // pxPerDay は論理値なので、表示領域を viewZoom で論理座標へ戻して算出する。
-    const avail = (container ? container.clientWidth / viewZoom : 0) - LABEL_W;
+    const avail = (container ? container.clientWidth / viewZoom : 0) - labelW;
     if (avail <= 0) return MIN_PPD;
     // 全期間が収まる px/日。MIN_PPD より小さくなる場合のみ下限を緩める。
     return Math.max(HARD_MIN_PPD, Math.min(MIN_PPD, avail / totalDays));
@@ -185,7 +189,7 @@
 
     const grid = document.getElementById('gantt-grid');
     grid.innerHTML = '';
-    grid.style.setProperty('--label-w', snapToDpr(displaySize(LABEL_W)) + 'px');
+    grid.style.setProperty('--label-w', snapToDpr(displaySize(labelW)) + 'px');
     grid.style.setProperty('--header-h', displaySize(HEADER_H) + 'px');
     grid.style.setProperty('--month-h', displaySize(26) + 'px');
     grid.style.setProperty('--day-h', displaySize(30) + 'px');
@@ -209,7 +213,7 @@
     rangeStart = min;
     const totalDays = diffDays(fmtDate(min), fmtDate(max));
     if (autoFitPpd) {
-      const avail = container.clientWidth / viewZoom - LABEL_W;
+      const avail = container.clientWidth / viewZoom - labelW;
       pxPerDay = Math.max(MIN_PPD, avail > 0 ? Math.min(DEF_PPD, avail / totalDays) : DEF_PPD);
       autoFitPpd = false;
     }
@@ -238,6 +242,10 @@
     corner.textContent = ganttData.title || 'Gantt';
     corner.title = 'ダブルクリックでタイトルを編集';
     corner.addEventListener('dblclick', () => startTitleEdit(corner));
+    const labelResizeHandle = el('div', 'label-resize-handle');
+    labelResizeHandle.addEventListener('mousedown', onLabelResizeStart);
+    labelResizeHandle.addEventListener('dblclick', e => e.stopPropagation());
+    corner.appendChild(labelResizeHandle);
     grid.appendChild(corner);
 
     const tlHeader = el('div', 'gantt-cell gantt-header-timeline');
@@ -262,7 +270,7 @@
       const dayCell = el('div', 'day-cell');
       dayCell.style.width = displayPpd() + 'px';
       const dom = cur.getDate();
-      if (dom === 1 || dom % 5 === 0) dayCell.textContent = String(dom);
+      if (dom === 1 || cur.getDay() === 1) dayCell.textContent = String(dom);
       if (fmtDate(cur) === todayStr) dayCell.classList.add('today');
       dayRow.appendChild(dayCell);
       cur.setDate(cur.getDate() + 1);
@@ -511,6 +519,36 @@
       started: false,
     };
     addDragListeners();
+  }
+
+  function onLabelResizeStart(e) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    labelResizeState = {
+      startX: e.clientX,
+      startW: labelW,
+    };
+    document.body.classList.add('label-resizing');
+    document.addEventListener('mousemove', onLabelResizeMove);
+    document.addEventListener('mouseup', onLabelResizeEnd);
+  }
+
+  function onLabelResizeMove(e) {
+    if (!labelResizeState) return;
+    const dx = (e.clientX - labelResizeState.startX) / viewZoom;
+    const nextW = Math.max(LABEL_W_MIN, Math.min(LABEL_W_MAX, Math.round(labelResizeState.startW + dx)));
+    if (nextW === labelW) return;
+    labelW = nextW;
+    autoFitPpd = false;
+    render();
+  }
+
+  function onLabelResizeEnd() {
+    document.removeEventListener('mousemove', onLabelResizeMove);
+    document.removeEventListener('mouseup', onLabelResizeEnd);
+    document.body.classList.remove('label-resizing');
+    labelResizeState = null;
   }
 
   function addDragListeners() {
@@ -1538,7 +1576,8 @@
     if (e.button !== 0) return;
     if (e.target.closest('.gantt-bar') ||
         e.target.closest('.milestone-diamond') ||
-        e.target.closest('.resize-handle')) return;
+        e.target.closest('.resize-handle') ||
+        e.target.closest('.label-resize-handle')) return;
     e.preventDefault();
     const container = document.getElementById('scroll-container');
     panState = {
@@ -1586,7 +1625,7 @@
     const STATUSES = [
       { value: 'done',   label: '✓  完了 (done)',    cls: 'pick-done'    },
       { value: 'active', label: '▶  進行中 (active)', cls: 'pick-active'  },
-      { value: '',       label: '○  未設定',           cls: 'pick-default' },
+      { value: '',       label: '○  未着手',           cls: 'pick-default' },
     ];
 
     STATUSES.forEach(({ value, label, cls }) => {
@@ -1713,14 +1752,14 @@
     const container = e.currentTarget;
     const rect = container.getBoundingClientRect();
     const contentX = e.clientX - rect.left + container.scrollLeft;
-    const dayAtCursor = (contentX - displaySize(LABEL_W)) / displayPpd();
+    const dayAtCursor = (contentX - displaySize(labelW)) / displayPpd();
     const factor = e.deltaY < 0 ? 1.15 : (1 / 1.15);
     const newPPD = Math.max(fitFloorPpd(), Math.min(MAX_PPD, pxPerDay * factor));
     if (Math.abs(newPPD - pxPerDay) < 0.01) return;
     pxPerDay = newPPD;
     autoFitPpd = false;
     render();
-    const newScrollLeft = Math.round((dayAtCursor * newPPD + LABEL_W) * viewZoom) - (e.clientX - rect.left);
+    const newScrollLeft = Math.round((dayAtCursor * newPPD + labelW) * viewZoom) - (e.clientX - rect.left);
     container.scrollLeft = Math.max(0, newScrollLeft);
   }, { passive: false });
 
