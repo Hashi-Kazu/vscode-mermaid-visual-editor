@@ -188,6 +188,9 @@ body.label-resizing * {
   color: var(--vscode-charts-blue);
   font-weight: bold;
 }
+.day-cell.excluded {
+  background: color-mix(in srgb, var(--vscode-editor-background) 80%, var(--vscode-foreground) 20%);
+}
 
 /* ── Section rows ── */
 .section-label {

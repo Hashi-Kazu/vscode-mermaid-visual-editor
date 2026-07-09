@@ -433,6 +433,28 @@ test('ganttToCode omits axisFormat line when empty string', () => {
   assert.doesNotMatch(code, /axisFormat/);
 });
 
+// ── excludes serialization (R-G18) ────────────────────────────────────────────
+
+test('ganttToCode emits excludes line when set', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', excludes: ['weekends', '2026-08-11'], sections: [
+      { name: 'S', tasks: [] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.match(code, /excludes weekends, 2026-08-11/);
+});
+
+test('ganttToCode omits excludes line when not set', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.doesNotMatch(code, /excludes/);
+});
+
 test('ganttToCode emits title line when set', () => {
   const data: GanttData = {
     title: 'test', dateFormat: 'YYYY-MM-DD', sections: [

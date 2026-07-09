@@ -721,6 +721,8 @@ export class EditorPanel {
       <option value="%Y-%m-%d">年-月-日</option>
       <option value="%m-%d">月-日</option>
     </select>
+    <label class="toolbar-label" for="chk-exclude-weekends">週末を除外</label>
+    <input type="checkbox" id="chk-exclude-weekends" disabled>
     <span id="status-label"></span>
     <span class="mode-badge">
       <span>Gantt</span>

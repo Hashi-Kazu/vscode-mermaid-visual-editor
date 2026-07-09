@@ -2,6 +2,11 @@ export interface GanttData {
   title: string;
   dateFormat: string;
   axisFormat?: string;
+  /** Mermaid `excludes` directive tokens (raw, trimmed, order/casing preserved).
+   *  Supported tokens: `weekends`, weekday names (`monday`..`sunday`), `YYYY-MM-DD`.
+   *  Used for display-only exclusion marking (R-G18); does not affect
+   *  duration/afterId-based scheduling calculations. */
+  excludes?: string[];
   sections: GanttSection[];
 }
 

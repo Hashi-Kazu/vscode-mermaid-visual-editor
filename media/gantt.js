@@ -63,6 +63,21 @@
     return Math.round((parseDate(b) - parseDate(a)) / 86400000);
   }
 
+  /* R-G18-03: `excludes` ディレクティブ（weekends / 曜日名 / YYYY-MM-DD）に
+     一致する日付かどうかを判定する。表示専用の判定であり、期間計算には使わない。 */
+  const WEEKDAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  function isExcludedDate(dateStr) {
+    if (!ganttData || !ganttData.excludes || ganttData.excludes.length === 0) return false;
+    const day = parseDate(dateStr).getDay();
+    return ganttData.excludes.some(tok => {
+      const lower = tok.toLowerCase();
+      if (lower === 'weekends') return day === 0 || day === 6;
+      const wIdx = WEEKDAY_NAMES.indexOf(lower);
+      if (wIdx !== -1) return day === wIdx;
+      return tok === dateStr;
+    });
+  }
+
   /* ── Dependency helpers ── */
   function resolveAfterIds() {
     if (!ganttData) return;
@@ -272,6 +287,7 @@
       const dom = cur.getDate();
       if (dom === 1 || cur.getDay() === 1) dayCell.textContent = String(dom);
       if (fmtDate(cur) === todayStr) dayCell.classList.add('today');
+      if (isExcludedDate(fmtDate(cur))) dayCell.classList.add('excluded');
       dayRow.appendChild(dayCell);
       cur.setDate(cur.getDate() + 1);
     }
@@ -1708,8 +1724,11 @@
       document.getElementById('btn-add-section').disabled = false;
       document.getElementById('btn-undo').disabled         = false;
       document.getElementById('sel-axis-format').disabled = false;
+      document.getElementById('chk-exclude-weekends').disabled = false;
       ganttData = msg.gantt;
       document.getElementById('sel-axis-format').value = ganttData.axisFormat || '';
+      document.getElementById('chk-exclude-weekends').checked =
+        !!(ganttData.excludes && ganttData.excludes.some(tok => tok.trim().toLowerCase() === 'weekends'));
       undoStack = [];
       autoFitPpd = true;
       collapsedSections.clear();
@@ -1722,6 +1741,7 @@
       document.getElementById('btn-add-section').disabled = true;
       document.getElementById('btn-undo').disabled         = true;
       document.getElementById('sel-axis-format').disabled = true;
+      document.getElementById('chk-exclude-weekends').disabled = true;
     } else if (msg.type === 'saved') {
       showStatus('✓ 保存済');
     }
@@ -1838,6 +1858,24 @@
     pushUndo();
     if (val) ganttData.axisFormat = val;
     else delete ganttData.axisFormat;
+    vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
+    render();
+  });
+
+  document.getElementById('chk-exclude-weekends').addEventListener('change', e => {
+    if (!ganttData) return;
+    pushUndo();
+    const set = new Set(ganttData.excludes || []);
+    if (e.target.checked) {
+      set.add('weekends');
+    } else {
+      for (const tok of Array.from(set)) {
+        if (tok.trim().toLowerCase() === 'weekends') set.delete(tok);
+      }
+    }
+    const next = Array.from(set);
+    if (next.length > 0) ganttData.excludes = next;
+    else delete ganttData.excludes;
     vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
     render();
   });
