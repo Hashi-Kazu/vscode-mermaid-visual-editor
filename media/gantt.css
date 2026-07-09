@@ -257,6 +257,13 @@ body.label-resizing * {
   white-space: nowrap;
 }
 
+/* R-G18-07: 除外日を除いた実働日数（工数）表示 */
+.task-effort {
+  flex-shrink: 0;
+  font-size: var(--font-11, 11px);
+  color: var(--vscode-descriptionForeground);
+}
+
 /* Crit toggle button — shown at the right of each task label cell */
 .crit-toggle {
   flex-shrink: 0;

@@ -78,6 +78,17 @@
     });
   }
 
+  /* R-G18-07: 除外日を除いた実働日数（工数）を算出する。表示専用の派生値であり、
+     duration/afterId などの既存データ・計算には一切影響しない。純粋関数。 */
+  function countWorkingDays(startDate, duration) {
+    let workDays = 0;
+    for (let i = 0; i < duration; i++) {
+      const d = addDays(startDate, i);
+      if (!isExcludedDate(d)) workDays++;
+    }
+    return workDays;
+  }
+
   /* ── Dependency helpers ── */
   function resolveAfterIds() {
     if (!ganttData) return;
@@ -421,6 +432,15 @@
       startLabelInlineEdit(si, ti, labelCell);
     });
     labelCell.appendChild(labelText);
+
+    // R-G18-07: マイルストーンには期間の概念がないため対象外
+    if (task.status !== 'milestone') {
+      const workDays = countWorkingDays(task.startDate, task.duration);
+      const effortSpan = el('span', 'task-effort');
+      effortSpan.textContent = '(' + workDays + '日)';
+      effortSpan.title = '期間' + task.duration + '日中、除外日を除く実働' + workDays + '日';
+      labelCell.appendChild(effortSpan);
+    }
 
     // Crit toggle: shows whether the task is on the critical path
     const critBtn = el('span', 'crit-toggle' + (task.crit ? ' crit-on' : ''));
