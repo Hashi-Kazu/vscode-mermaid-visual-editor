@@ -1,64 +1,107 @@
 name: AI Coder
 
 on:
- issues:
-   types: [labeled]
+  schedule:
+    - cron: '0 18 * * *'  # JST 3:00
+  workflow_dispatch:
 
 permissions:
- contents: write
- pull-requests: write
- issues: write
- id-token: write
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
 
 jobs:
- ai-code:
-   if: github.event.label.name == 'ai-task'
-   runs-on: ubuntu-latest
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      issues: ${{ steps.list.outputs.issues }}
+    steps:
+      - name: List ai-task issues
+        id: list
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          issues=$(gh issue list --repo ${{ github.repository }} --label ai-task --state open --json number,title,body --limit 100)
+          echo "issues=$(echo "$issues" | jq -c .)" >> "$GITHUB_OUTPUT"
 
-   steps:
-     - uses: anthropics/claude-code-action@v1
-       with:
-         claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-         github_token: ${{ secrets.GITHUB_TOKEN }}
-         show_full_output: true
-         prompt: |
-           あなたは vscode-mermaid-visual-editor（VS Code 拡張機能）の開発エージェントです。
+  ai-code:
+    needs: discover
+    if: needs.discover.outputs.issues != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        issue: ${{ fromJson(needs.discover.outputs.issues) }}
 
-           以下の Issue を実装・修正してください。
+    steps:
+      - name: Select model
+        id: model
+        run: |
+          text=$(cat <<'EOF'
+          ${{ matrix.issue.title }} ${{ matrix.issue.body }}
+          EOF
+          )
+          if echo "$text" | grep -Eqi 'アーキテクチャ|設計|リファクタ|調査|複雑'; then
+            echo "model=claude-opus-4-8" >> "$GITHUB_OUTPUT"
+          elif echo "$text" | grep -Eqi 'typo|誤字|文言修正|バージョンのみ'; then
+            echo "model=claude-haiku-4-5-20251001" >> "$GITHUB_OUTPUT"
+          else
+            echo "model=claude-sonnet-5" >> "$GITHUB_OUTPUT"
+          fi
 
-           Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          show_full_output: true
+          prompt: |
+            あなたは vscode-mermaid-visual-editor（VS Code 拡張機能）の開発エージェントです。
 
-           Issue 本文:
-           ${{ github.event.issue.body }}
+            以下の Issue を実装・修正してください。
 
-           ## 作業手順
+            Issue #${{ matrix.issue.number }}: ${{ matrix.issue.title }}
 
-           1. リポジトリのコードを読んで現状を把握する
-           2. Issue の要求を実装・修正する
-              - ソースコードは `src/` 以下（TypeScript）
-              - WebView 用スクリプトは `media/gantt.js`、`media/flowchart.js`
-              - スタイルは `media/gantt.css`
-              - エントリポイントは `src/extension.ts`
-              - パネル制御は `src/ganttPanel.ts`
-              - スニペットは `snippets/`、文法定義は `syntaxes/`
-           3. コミット前に `package.json` の `version` を確認し、必要に応じて更新する
-              - 判定基準は `docs/ai/release-policy.md` の「バージョンポリシー」に従う
-                - 要件変更あり（`docs/requirements-usdm.md` の仕様内容に変更が生じる修正） → マイナーアップ
-                - コード修正のみ（バグ修正・リファクタ等、要件変更を伴わない） → パッチアップ
-              - 要件変更を行った場合は `docs/requirements-usdm.md` 冒頭の「バージョン」「最終更新」欄と `package.json` の `version` を同じ値に揃える
-              - Marketplace は同一バージョンの再公開ができないため、変更内容が些少でも必ずいずれかのアップを行う
-           4. `feature/issue-${{ github.event.issue.number }}` ブランチを作成して変更をコミットする
-              - コミットメッセージは日本語で簡潔に（例: `feat: ○○機能を追加 (#${{ github.event.issue.number }})`）
-           5. main ブランチへの draft PR を作成する
-              - PR タイトル: `feat: ${{ github.event.issue.title }}`
-              - PR 本文に変更内容のサマリーと `Closes #${{ github.event.issue.number }}` を含める
+            Issue 本文:
+            ${{ matrix.issue.body }}
 
-           ## 注意事項
+            ## 作業手順
 
-           - `CLAUDE.md` はコード構成・規約の参照用として読み、エージェント定義（`.claude/agents/`）に従って実装すること
-           - `dist/` は編集しない（ビルド出力のため）
-           - コメントは WHY が非自明な場合のみ書く
-           - バージョンポリシーの詳細は `docs/ai/release-policy.md` を参照する
-         claude_args: |
-           --max-turns 100
-           --dangerously-skip-permissions
+            1. リポジトリのコードを読んで現状を把握する
+            2. Issue の要求を実装・修正する
+               - ソースコードは `src/` 以下（TypeScript）
+               - WebView 用スクリプトは `media/gantt.js`、`media/flowchart.js`
+               - スタイルは `media/gantt.css`
+               - エントリポイントは `src/extension.ts`
+               - パネル制御は `src/ganttPanel.ts`
+               - スニペットは `snippets/`、文法定義は `syntaxes/`
+            3. コミット前に `package.json` の `version` を確認し、必要に応じて更新する
+               - 判定基準は `docs/ai/release-policy.md` の「バージョンポリシー」に従う
+                 - 要件変更あり（`docs/requirements-usdm.md` の仕様内容に変更が生じる修正） → マイナーアップ
+                 - コード修正のみ（バグ修正・リファクタ等、要件変更を伴わない） → パッチアップ
+               - 要件変更を行った場合は `docs/requirements-usdm.md` 冒頭の「バージョン」「最終更新」欄と `package.json` の `version` を同じ値に揃える
+               - Marketplace は同一バージョンの再公開ができないため、変更内容が些少でも必ずいずれかのアップを行う
+            4. `feature/issue-${{ matrix.issue.number }}` ブランチを作成して変更をコミットする
+               - コミットメッセージは日本語で簡潔に（例: `feat: ○○機能を追加 (#${{ matrix.issue.number }})`）
+            5. main ブランチへの draft PR を作成する
+               - PR タイトル: `feat: ${{ matrix.issue.title }}`
+               - PR 本文に変更内容のサマリーと `Closes #${{ matrix.issue.number }}` を含める
+
+            ## 注意事項
+
+            - `CLAUDE.md` はコード構成・規約の参照用として読み、エージェント定義（`.claude/agents/`）に従って実装すること
+            - `dist/` は編集しない（ビルド出力のため）
+            - コメントは WHY が非自明な場合のみ書く
+            - バージョンポリシーの詳細は `docs/ai/release-policy.md` を参照する
+          claude_args: |
+            --max-turns 100
+            --model ${{ steps.model.outputs.model }}
+            --dangerously-skip-permissions
+
+      - name: Remove ai-task label
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue edit ${{ matrix.issue.number }} --repo ${{ github.repository }} \
+            --remove-label ai-task
