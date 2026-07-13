@@ -30,6 +30,9 @@
   const VIEW_ZOOM_MAX  = 2;
   const VIEW_ZOOM_STEP = 0.1;
   const DEF_VIEW_ZOOM  = 1;
+  /* ビュー既定倍率。パーセント表示100%（viewZoom=1）のとき、実描画をこの倍率で拡大する。
+     初期表示を従来比1.2倍にしつつ、UI上は100%として扱うための基準倍率。 */
+  const VIEW_SCALE_BASE = 1.2;
 
   /* ── State ── */
   let ganttData    = null;
@@ -145,8 +148,12 @@
     return diffDays(fmtDate(rangeStart), dateStr) * displayPpd();
   }
 
+  function viewScale() {
+    return viewZoom * VIEW_SCALE_BASE;
+  }
+
   function displaySize(value) {
-    return value * viewZoom;
+    return value * viewScale();
   }
 
   function displayPpd() {
@@ -198,8 +205,8 @@
     const container = document.getElementById('scroll-container');
     const { min, max } = calcRange(ganttData);
     const totalDays = Math.max(1, diffDays(fmtDate(min), fmtDate(max)));
-    // pxPerDay は論理値なので、表示領域を viewZoom で論理座標へ戻して算出する。
-    const avail = (container ? container.clientWidth / viewZoom : 0) - labelW;
+    // pxPerDay は論理値なので、表示領域を viewScale() で論理座標へ戻して算出する。
+    const avail = (container ? container.clientWidth / viewScale() : 0) - labelW;
     if (avail <= 0) return MIN_PPD;
     // 全期間が収まる px/日。MIN_PPD より小さくなる場合のみ下限を緩める。
     return Math.max(HARD_MIN_PPD, Math.min(MIN_PPD, avail / totalDays));
@@ -268,7 +275,7 @@
     rangeStart = min;
     const totalDays = diffDays(fmtDate(min), fmtDate(max));
     if (autoFitPpd) {
-      const avail = container.clientWidth / viewZoom - labelW;
+      const avail = container.clientWidth / viewScale() - labelW;
       pxPerDay = Math.max(MIN_PPD, avail > 0 ? Math.min(DEF_PPD, avail / totalDays) : DEF_PPD);
       autoFitPpd = false;
     }
@@ -629,7 +636,7 @@
 
   function onLabelResizeMove(e) {
     if (!labelResizeState) return;
-    const dx = (e.clientX - labelResizeState.startX) / viewZoom;
+    const dx = (e.clientX - labelResizeState.startX) / viewScale();
     const nextW = Math.max(LABEL_W_MIN, Math.min(LABEL_W_MAX, Math.round(labelResizeState.startW + dx)));
     if (nextW === labelW) return;
     labelW = nextW;
@@ -664,13 +671,13 @@
 
     // dx と表示上の px/日は、どちらも実画面px基準。
     if (type === 'move') {
-      const days = Math.round(dx / (pxPerDay * viewZoom));
+      const days = Math.round(dx / (pxPerDay * viewScale()));
       const newDate = addDays(origDate, days);
       const newX = Math.round(dateToX(newDate));
       bar.style.left = snapToDpr(isMilestone ? newX - displaySize(DIAMOND_SIZE) / 2 : newX) + 'px';
       updateGhost(newDate);
     } else {
-      const days = Math.round(dx / (pxPerDay * viewZoom));
+      const days = Math.round(dx / (pxPerDay * viewScale()));
       const newDur = Math.max(1, origDur + days);
       bar.style.width = snapToDpr(Math.max(displaySize(RESIZE_W + 4), Math.round(newDur * displayPpd()))) + 'px';
       updateGhost(newDur + '日');
@@ -692,7 +699,7 @@
     const { si, ti, type, startX, origDate, origDur } = dragState;
     const task  = ganttData.sections[si].tasks[ti];
     const dx    = e.clientX - startX;
-    const days  = Math.round(dx / (pxPerDay * viewZoom));
+    const days  = Math.round(dx / (pxPerDay * viewScale()));
     let patch   = {};
 
     if (type === 'move') {
@@ -1908,7 +1915,7 @@
     pxPerDay = newPPD;
     autoFitPpd = false;
     render();
-    const newScrollLeft = Math.round((dayAtCursor * newPPD + labelW) * viewZoom) - (e.clientX - rect.left);
+    const newScrollLeft = Math.round((dayAtCursor * newPPD + labelW) * viewScale()) - (e.clientX - rect.left);
     container.scrollLeft = Math.max(0, newScrollLeft);
   }, { passive: false });
 
