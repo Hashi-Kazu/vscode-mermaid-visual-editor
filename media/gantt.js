@@ -515,10 +515,18 @@
       appendExternalLabel(tlCell, task.label, diamondRight + displaySize(4), displaySize(BAR_TOP), tlW);
     } else {
       const x = Math.round(dateToX(task.startDate));
-      const w = Math.max(displaySize(RESIZE_W + 4), Math.round(task.duration * displayPpd()));
+      // バーの自然幅（実期間幅）。ステータスインジケーター(10px)＋左パディング(16px)を
+      // 表示できるだけの幅が無い狭いバーではインジケーターを省き、実期間幅で描画して
+      // バーが期間範囲からはみ出さないようにする（R-G04-05）。
+      const natW = Math.round(task.duration * displayPpd());
+      const indicatorMinW = displaySize(16) + displaySize(10);
+      const showIndicator = natW >= indicatorMinW;
+      // 通常バーは自然幅、狭いバーはクリック/リサイズ可能な絶対下限のみ確保する。
+      const w = showIndicator ? natW : Math.max(displaySize(RESIZE_W), natW);
       // Build class list: base status class + optional crit modifier
       let barCls = 'gantt-bar status-' + (task.status || 'default');
       if (task.crit) barCls += ' crit';
+      if (!showIndicator) barCls += ' no-indicator';
       const bar = el('div', barCls);
       bar.style.left = snapToDpr(x) + 'px';
       bar.style.width = snapToDpr(w) + 'px';
@@ -527,25 +535,30 @@
       bar.dataset.ti  = ti;
       bar.title = task.label;
 
-      const indicator = el('div', 'status-indicator');
-      indicator.title = 'クリックで状態変更';
-      indicator.addEventListener('mousedown', e => e.stopPropagation());
-      indicator.addEventListener('click', e => {
-        e.preventDefault();
-        e.stopPropagation();
-        showStatusPicker(si, ti, indicator);
-      });
-      indicator.addEventListener('dblclick', e => {
-        e.preventDefault();
-        e.stopPropagation();
-      });
-      bar.appendChild(indicator);
+      if (showIndicator) {
+        const indicator = el('div', 'status-indicator');
+        indicator.title = 'クリックで状態変更';
+        indicator.addEventListener('mousedown', e => e.stopPropagation());
+        indicator.addEventListener('click', e => {
+          e.preventDefault();
+          e.stopPropagation();
+          showStatusPicker(si, ti, indicator);
+        });
+        indicator.addEventListener('dblclick', e => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+        bar.appendChild(indicator);
+      }
 
       const barLabel = el('span', 'bar-label');
       // バー内の実効幅（左右パディングを除く）にタスク名が収まるかを事前計測し、
       // 収まらない場合はバー内は空のままにしてバー右側外側にラベルを表示する。
+      // インジケーターを省いた狭いバーは左パディングが縮む（.no-indicator）ため、
+      // それに合わせて実効幅を算出する。
       const fontPx = displaySize(11);
-      const innerW = w - displaySize(16 + 8);
+      const padStart = showIndicator ? displaySize(16) : displaySize(2);
+      const innerW = w - padStart - displaySize(8);
       const textW = measureTextWidth(task.label, fontPx);
       if (textW <= innerW) {
         barLabel.textContent = task.label;

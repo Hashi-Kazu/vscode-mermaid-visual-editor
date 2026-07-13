@@ -331,6 +331,9 @@ body.label-resizing * {
 }
 .gantt-bar:active { cursor: grabbing; }
 .gantt-bar:hover  { filter: brightness(1.1); }
+/* 狭いバーはステータスインジケーターを省くため左パディングを縮め、
+   バーを実期間幅に収める（R-G04-05）。 */
+.gantt-bar.no-indicator { padding-left: 2px; }
 
 .bar-label {
   font-size: var(--font-11, 11px);
