@@ -2,7 +2,7 @@ name: AI Coder
 
 on:
   schedule:
-    - cron: '0 18 * * *'  # JST 3:00
+    - cron: '0 17 * * *'  # JST 2:00
   workflow_dispatch:
 
 permissions:
