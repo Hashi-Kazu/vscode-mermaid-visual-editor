@@ -102,6 +102,7 @@ function parseTaskLine(line: string, taskById: Map<string, string>): GanttTask |
   let id = '';
   let startStr = '';
   let duration = 7;
+  let useEndDate = false;
   let idx = 0;
 
   // Consume all leading keyword tokens (crit / done / active / milestone).
@@ -135,6 +136,7 @@ function parseTaskLine(line: string, taskById: Map<string, string>): GanttTask |
     } else if (isDateStr(d)) {
       const resolved = resolveStart(startStr, taskById);
       duration = Math.max(1, diffDays(resolved, d));
+      useEndDate = true;
     }
   }
 
@@ -145,6 +147,7 @@ function parseTaskLine(line: string, taskById: Map<string, string>): GanttTask |
     ...(crit ? { crit: true } : {}),
     startDate, duration,
     ...(afterId ? { afterId } : {}),
+    ...(useEndDate ? { useEndDate: true } : {}),
   };
 }
 

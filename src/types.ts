@@ -28,6 +28,12 @@ export interface GanttTask {
   startDate: string; // YYYY-MM-DD
   duration: number;  // days
   afterId?: string;  // dependency: `after <id>`
+  /** When true, this task is serialized as `開始日, 終了日(YYYY-MM-DD)` instead of
+   *  `開始日, Nd`. Set per-task only when a task's schedule is edited (or created)
+   *  in the Web editor, so untouched duration-form tasks are never converted on
+   *  save. Parsing an end-date-form task also sets this so the form survives
+   *  round-trips. Ignored for milestones and `afterId` tasks (always `Nd`). */
+  useEndDate?: boolean;
 }
 
 // Extension → Webview (Gantt)
