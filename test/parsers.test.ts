@@ -250,6 +250,16 @@ test('parseGantt derives duration from an explicit end date (start, endDate)', (
   assert.equal(data.sections[0].tasks[0].duration, 4);
 });
 
+test('parseGantt flags useEndDate for end-date form and not for duration form (R-G19)', () => {
+  // End-date form: duration derived, useEndDate set.
+  const end = parseGantt('gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T :2026-01-01, 2026-01-04\n')!;
+  assert.equal(end.sections[0].tasks[0].duration, 3);
+  assert.equal(end.sections[0].tasks[0].useEndDate, true);
+  // Duration form: useEndDate stays unset.
+  const dur = parseGantt('gantt\n    dateFormat YYYY-MM-DD\n    section S\n        T :t1, 2026-01-01, 3d\n')!;
+  assert.equal(dur.sections[0].tasks[0].useEndDate, undefined);
+});
+
 // ── after-dependency resolution (R-G11-04) ────────────────────────────────────
 
 test('parseGantt resolves after <id> to the predecessor end date and keeps afterId', () => {

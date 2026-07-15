@@ -143,6 +143,73 @@ test('ganttToCode serializes status, id, afterId and duration', () => {
   assert.match(code, /B :t2, after t1, 2d/);
 });
 
+// ── end-date write-back serialization (R-G19) ─────────────────────────────────
+
+test('ganttToCode emits end date (exclusive) for a useEndDate absolute-start task', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: '', label: 'A', status: '', startDate: '2026-01-01', duration: 3, useEndDate: true },
+      ] },
+    ],
+  };
+  const code = ganttToCode(data);
+  // end date = start + duration = 2026-01-04 (exclusive)
+  assert.match(code, /A :2026-01-01, 2026-01-04/);
+  assert.doesNotMatch(code, /A :2026-01-01, 3d/);
+});
+
+test('ganttToCode keeps Nd form for a task without useEndDate', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: '', label: 'A', status: '', startDate: '2026-01-01', duration: 3 },
+      ] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.match(code, /A :2026-01-01, 3d/);
+});
+
+test('ganttToCode keeps `after id, Nd` even when useEndDate is set', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: 't2', label: 'B', status: '', startDate: '2026-01-04', duration: 2, afterId: 't1', useEndDate: true },
+      ] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.match(code, /B :t2, after t1, 2d/);
+  assert.doesNotMatch(code, /2026-01-06/);
+});
+
+test('ganttToCode keeps 0d for a milestone even when useEndDate is set', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: 'm1', label: 'M1', status: 'milestone', startDate: '2026-03-01', duration: 0, useEndDate: true },
+      ] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.match(code, /M1 :milestone, m1, 2026-03-01, 0d/);
+});
+
+test('end-date write-back round-trip: duration is preserved through serialize → parse', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: '', label: 'A', status: '', startDate: '2026-01-01', duration: 3, useEndDate: true },
+      ] },
+    ],
+  };
+  const round = parseGantt(ganttToCode(data))!;
+  const task = round.sections[0].tasks[0];
+  assert.equal(task.duration, 3);
+  assert.equal(task.useEndDate, true);
+});
+
 // ── crit serialization ────────────────────────────────────────────────────────
 
 test('ganttToCode serializes crit flag alone', () => {

@@ -707,11 +707,15 @@
       // ドラッグ移動で after <id> 依存を解除 (R-G11-05)
       if (task.afterId) delete task.afterId;
       task.startDate = addDays(origDate, days);
+      // 日程を編集したので終了日形式で書き戻す (R-G19)
+      if (task.status !== 'milestone') task.useEndDate = true;
       patch = { startDate: task.startDate };
     } else {
       const newDur = Math.max(1, origDur + days);
       if (newDur === origDur) { undoStack.pop(); dragState = null; return; }
       task.duration = newDur;
+      // 日程を編集したので終了日形式で書き戻す (R-G19)
+      if (task.status !== 'milestone') task.useEndDate = true;
       patch = { duration: task.duration };
     }
 
@@ -1259,6 +1263,7 @@
       t.startDate = newDate;
       t.duration  = newDur;
       if (t.afterId) delete t.afterId; // R-G14-04: 依存関係を解除して絶対日付に変換
+      if (!isMilestone) t.useEndDate = true; // 日程を編集したので終了日形式で書き戻す (R-G19)
       vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
       render();
     }
@@ -1402,6 +1407,7 @@
       t.startDate = newStart;
       t.duration  = newDur;
       if (t.afterId) delete t.afterId; // 開始日を直接指定したら依存を解除（R-G11-05 同方針）
+      if (!isMilestone) t.useEndDate = true; // 日程を編集したので終了日形式で書き戻す (R-G19)
 
       if (hasAnyAfterIds()) resolveAfterIds();
       vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
@@ -1428,7 +1434,7 @@
     const sec = ganttData.sections[si];
     const prev = (afterTi >= 0 && afterTi < sec.tasks.length) ? sec.tasks[afterTi] : null;
     const startDate = prev ? addDays(prev.startDate, prev.duration || 0) : fmtDate(new Date());
-    const newTask = { id: '', label: '新しいタスク', status: '', startDate, duration: 7 };
+    const newTask = { id: '', label: '新しいタスク', status: '', startDate, duration: 7, useEndDate: true };
     sec.tasks.splice(afterTi + 1, 0, newTask);
     const newTi = afterTi + 1;
     selected = { si, ti: newTi };
@@ -1463,6 +1469,8 @@
       ...(orig.crit ? { crit: true } : {}),
       startDate: addDays(orig.startDate, orig.duration || 0),
       duration: orig.duration,
+      // 複製は日程を新規生成するので、非マイルストーンは終了日形式で書き戻す (R-G19)
+      ...(orig.status !== 'milestone' ? { useEndDate: true } : {}),
     };
     sec.tasks.splice(ti + 1, 0, newTask);
     vscode.postMessage({ type: 'structuralEdit', gantt: ganttData });
