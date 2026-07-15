@@ -135,7 +135,7 @@ function parseTaskLine(line: string, taskById: Map<string, string>): GanttTask |
       else                                             duration = Math.max(status === 'milestone' ? 0 : 1, n);
     } else if (isDateStr(d)) {
       const resolved = resolveStart(startStr, taskById);
-      duration = Math.max(1, diffDays(resolved, d));
+      duration = Math.max(status === 'milestone' ? 0 : 1, diffDays(resolved, d));
       useEndDate = true;
     }
   }
