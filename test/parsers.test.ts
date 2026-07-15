@@ -138,6 +138,15 @@ test('parseGantt parses milestone + crit combination', () => {
   assert.equal(task.id, 'm1');
 });
 
+test('parseGantt parses same-date milestone as duration 0 with useEndDate', () => {
+  const code = 'gantt\n    dateFormat YYYY-MM-DD\n    section S\n        M1 :milestone, m1, 2026-03-01, 2026-03-01\n';
+  const data = parseGantt(code)!;
+  const task = data.sections[0].tasks[0];
+  assert.equal(task.status, 'milestone');
+  assert.equal(task.duration, 0);
+  assert.equal(task.useEndDate, true);
+});
+
 // ── active status parsing ─────────────────────────────────────────────────────
 
 test('parseGantt parses active status', () => {

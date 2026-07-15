@@ -47,9 +47,11 @@ function serializeTask(t: GanttTask): string {
     // start is unstable in Mermaid, so never emit end-date form here.
     parts.push(`after ${t.afterId}`);
     parts.push(`${t.duration}d`);
-  } else if (t.useEndDate && t.status !== 'milestone') {
+  } else if (t.useEndDate) {
     // Only tasks whose schedule was edited/created in the Web editor (or were
-    // authored with an end date) serialize as `開始日, 終了日`.
+    // authored with an end date) serialize as `開始日, 終了日`. For milestones
+    // (duration 0), endDateExclusive() returns the same day, so this yields
+    // `開始日, 開始日`.
     parts.push(t.startDate);
     parts.push(endDateExclusive(t));
   } else {

@@ -184,11 +184,23 @@ test('ganttToCode keeps `after id, Nd` even when useEndDate is set', () => {
   assert.doesNotMatch(code, /2026-01-06/);
 });
 
-test('ganttToCode keeps 0d for a milestone even when useEndDate is set', () => {
+test('ganttToCode serializes edited milestone (useEndDate) as start,start', () => {
   const data: GanttData = {
     title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
       { name: 'S', tasks: [
         { id: 'm1', label: 'M1', status: 'milestone', startDate: '2026-03-01', duration: 0, useEndDate: true },
+      ] },
+    ],
+  };
+  const code = ganttToCode(data);
+  assert.match(code, /M1 :milestone, m1, 2026-03-01, 2026-03-01/);
+});
+
+test('ganttToCode keeps 0d for an untouched milestone', () => {
+  const data: GanttData = {
+    title: 'P', dateFormat: 'YYYY-MM-DD', sections: [
+      { name: 'S', tasks: [
+        { id: 'm1', label: 'M1', status: 'milestone', startDate: '2026-03-01', duration: 0 },
       ] },
     ],
   };
