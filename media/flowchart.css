@@ -149,13 +149,15 @@ body {
 .fc-node-hover polygon,
 .fc-node-hover circle,
 .fc-node-hover ellipse,
-.fc-node-hover path.node-shape {
+.fc-node-hover path.node-shape,
+.fc-node-hover path.basic {
   filter: brightness(1.15);
 }
 .fc-node-drop-target rect,
 .fc-node-drop-target polygon,
 .fc-node-drop-target circle,
-.fc-node-drop-target ellipse {
+.fc-node-drop-target ellipse,
+.fc-node-drop-target path.basic {
   stroke: var(--vscode-focusBorder) !important;
   stroke-width: 2.5px !important;
 }
@@ -164,7 +166,8 @@ body {
 g.node.fc-selected rect,
 g.node.fc-selected polygon,
 g.node.fc-selected circle,
-g.node.fc-selected ellipse {
+g.node.fc-selected ellipse,
+g.node.fc-selected path.basic {
   stroke: var(--vscode-focusBorder) !important;
   stroke-width: 2.5px !important;
   filter: brightness(1.1) drop-shadow(0 0 4px var(--vscode-focusBorder));
