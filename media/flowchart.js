@@ -369,8 +369,19 @@
     hidePorts(nodeId);
     // ノードにつきポートは1つのみ表示する（起点ノードが同じなら
     // どこから辺を引いても結果は完全に同一のため、見た目と挙動を一致させる）
-    // 位置はノードの右上角
-    const pos = { x: bbox.right, y: bbox.top };
+    // 位置はグラフの向き（TD/BT/LR/RL）に沿った辺の中点
+    // （ノードエディタ全般の慣習に合わせ、流れの先頭側に配置）
+    const dir = selDirection.value;
+    let pos;
+    if (dir === 'LR') {
+      pos = { x: bbox.right, y: (bbox.top + bbox.bottom) / 2 };
+    } else if (dir === 'RL') {
+      pos = { x: bbox.left, y: (bbox.top + bbox.bottom) / 2 };
+    } else if (dir === 'BT') {
+      pos = { x: (bbox.left + bbox.right) / 2, y: bbox.top };
+    } else {
+      pos = { x: (bbox.left + bbox.right) / 2, y: bbox.bottom };
+    }
 
     const port = document.createElement('div');
     port.className = 'fc-port visible';
