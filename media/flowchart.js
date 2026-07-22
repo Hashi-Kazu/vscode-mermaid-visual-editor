@@ -345,7 +345,7 @@
   }
 
   // ── Ports ─────────────────────────────────────────────────────────────────
-  const portElements = new Map(); // nodeId -> [portEl, ...]
+  const portElements = new Map(); // nodeId -> portEl
   let portHideTimer = null;
 
   function scheduleHidePorts(nodeId) {
@@ -367,51 +367,41 @@
     const bbox = nodeEl.getBoundingClientRect();
 
     hidePorts(nodeId);
-    const ports = [];
-    // 図形の各辺の中点をそのままポート中心に使う
-    // （CSS の translate(-50%,-50%) でドットが中心に揃う）
-    const cx = bbox.left + bbox.width / 2;
-    const cy = bbox.top + bbox.height / 2;
-    const positions = [
-      { x: cx,          y: bbox.top,    label: 'top' },
-      { x: cx,          y: bbox.bottom, label: 'bottom' },
-      { x: bbox.left,   y: cy,          label: 'left' },
-      { x: bbox.right,  y: cy,          label: 'right' },
-    ];
+    // ノードにつきポートは1つのみ表示する（起点ノードが同じなら
+    // どこから辺を引いても結果は完全に同一のため、見た目と挙動を一致させる）
+    // 位置はノードの右上角
+    const pos = { x: bbox.right, y: bbox.top };
 
-    positions.forEach(pos => {
-      const port = document.createElement('div');
-      port.className = 'fc-port visible';
-      port.style.left = pos.x + 'px';
-      port.style.top  = pos.y + 'px';
-      port.style.position = 'fixed';
-      document.body.appendChild(port);
-      ports.push(port);
+    const port = document.createElement('div');
+    port.className = 'fc-port visible';
+    port.style.left = pos.x + 'px';
+    port.style.top  = pos.y + 'px';
+    port.style.position = 'fixed';
+    document.body.appendChild(port);
 
-      // ポートにカーソルが乗っている間はノードの mouseleave による
-      // 自動非表示をキャンセルし、確実に掴めるようにする
-      port.addEventListener('mouseenter', cancelHidePorts);
-      port.addEventListener('mouseleave', () => scheduleHidePorts(nodeId));
+    // ポートにカーソルが乗っている間はノードの mouseleave による
+    // 自動非表示をキャンセルし、確実に掴めるようにする
+    port.addEventListener('mouseenter', cancelHidePorts);
+    port.addEventListener('mouseleave', () => scheduleHidePorts(nodeId));
 
-      port.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        cancelHidePorts();
-        // pos はポート（＝図形端点）の中心座標
-        startPortDrag(nodeId, pos.x, pos.y);
-      });
+    port.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      cancelHidePorts();
+      startPortDrag(nodeId, pos.x, pos.y);
     });
-    portElements.set(nodeId, ports);
+
+    portElements.set(nodeId, port);
   }
 
   function hidePorts(nodeId) {
-    const ports = portElements.get(nodeId);
-    if (ports) ports.forEach(p => p.remove());
+    const port = portElements.get(nodeId);
+    if (port) port.remove();
     portElements.delete(nodeId);
   }
 
   function hideAllPorts() {
-    portElements.forEach((ports) => ports.forEach(p => p.remove()));
+    portElements.forEach((port) => port.remove());
     portElements.clear();
   }
 
