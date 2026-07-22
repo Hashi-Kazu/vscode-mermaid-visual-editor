@@ -412,7 +412,7 @@ export class EditorPanel {
 
   private async _handleExport(format: 'svg' | 'png', data: string): Promise<void> {
     const defaultUri = vscode.Uri.file(exportDefaultPath(this._document.uri.fsPath, format));
-    const filters = format === 'svg' ? { 'SVG Image': ['svg'] } : { 'PNG Image': ['png'] };
+    const filters: { [name: string]: string[] } = format === 'svg' ? { 'SVG Image': ['svg'] } : { 'PNG Image': ['png'] };
     const uri = await vscode.window.showSaveDialog({ defaultUri, filters });
     if (!uri) return;
     const bytes = Buffer.from(data, exportEncoding(format));
