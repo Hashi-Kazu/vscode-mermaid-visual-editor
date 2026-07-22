@@ -1634,33 +1634,44 @@
   }
 
   function findDropTarget(clientY) {
-    // タスク行に加え、タスク行を表示していないセクション行（空セクション、または
-    // 折りたたみセクション）もドロップ先候補に含める。これにより空セクションへ
-    // タスクを移動でき(要3)、折りたたみセクションへも入れられる(B-10)。
-    const isSectionDrop = r =>
-      r.type === 'section' &&
-      (ganttData.sections[r.si].tasks.length === 0 || collapsedSections.has(r.si));
-    const rows = rowIndex.filter(r => r.type === 'task' || isSectionDrop(r));
-    for (const row of rows) {
-      const rect = row.el.getBoundingClientRect();
-      if (clientY < rect.top + rect.height / 2) {
-        if (row.type === 'section') {
-          // セクション行の上端 → そのセクション末尾へ挿入（折りたたみは展開）
-          const ti = ganttData.sections[row.si].tasks.length;
-          return { si: row.si, ti, position: 'before', el: row.el, sectionDrop: true };
+    // 「ドロップ・スロット（挿入位置）」を視覚順に列挙し、カーソルに最も近い
+    // スロットのライン位置（before→行top / after→行bottom）を選ぶ。
+    // こうすることで、展開中かつ非空のセクションでも「そのセクションの末尾」
+    // スロットが必ず存在し、drop-indicatorの表示位置と実挿入位置が一致する。
+    const slots = [];
+    ganttData.sections.forEach((sec, si) => {
+      if (sec.tasks.length === 0 || collapsedSections.has(si)) {
+        // 空セクション、または折りたたみセクション → そのセクション行自体を
+        // ドロップ先とする（タスクを移動すると末尾に挿入・展開される）(要3, B-10)。
+        const secRow = rowIndex.find(r => r.type === 'section' && r.si === si);
+        if (secRow) {
+          slots.push({ si, ti: sec.tasks.length, position: 'before', el: secRow.el, sectionDrop: true });
         }
-        return { si: row.si, ti: row.ti, position: 'before', el: row.el };
+        return;
+      }
+      const taskRows = rowIndex.filter(r => r.type === 'task' && r.si === si);
+      taskRows.forEach(row => {
+        slots.push({ si, ti: row.ti, position: 'before', el: row.el });
+      });
+      const lastRow = taskRows[taskRows.length - 1];
+      if (lastRow) {
+        slots.push({ si, ti: lastRow.ti, position: 'after', el: lastRow.el });
+      }
+    });
+    if (slots.length === 0) return null;
+
+    let best = null;
+    let bestDist = Infinity;
+    for (const slot of slots) {
+      const rect = slot.el.getBoundingClientRect();
+      const lineY = slot.position === 'after' ? rect.bottom : rect.top;
+      const dist = Math.abs(clientY - lineY);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = slot;
       }
     }
-    if (rows.length > 0) {
-      const last = rows[rows.length - 1];
-      if (last.type === 'section') {
-        const ti = ganttData.sections[last.si].tasks.length;
-        return { si: last.si, ti, position: 'before', el: last.el, sectionDrop: true };
-      }
-      return { si: last.si, ti: last.ti, position: 'after', el: last.el };
-    }
-    return null;
+    return best;
   }
 
   function findSectionDropTarget(clientY, fromSi) {
