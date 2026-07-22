@@ -1605,11 +1605,22 @@
       : findDropTarget(e.clientY);
     reorderState.target = target;
 
+    // 空/折りたたみセクションが対象のときは行全体を強調してドロップ先を示す(要8)。
+    // 直前の強調は毎回除去し、対象が変わっても残らないようにする。
+    clearDropIntoSection();
     const ind = document.getElementById('drop-indicator');
     if (ind && target) {
       const rect = target.el.getBoundingClientRect();
       ind.style.top = (target.position === 'before' ? rect.top : rect.bottom) - 1 + 'px';
+      if (target.sectionDrop) {
+        target.el.classList.add('drop-into-section');
+      }
     }
+  }
+
+  function clearDropIntoSection() {
+    document.querySelectorAll('.drop-into-section')
+      .forEach(el => el.classList.remove('drop-into-section'));
   }
 
   function onReorderEnd() {
@@ -1617,6 +1628,7 @@
     document.removeEventListener('mouseup',   onReorderEnd);
     const ind = document.getElementById('drop-indicator');
     if (ind) ind.remove();
+    clearDropIntoSection();
 
     if (!reorderState || !reorderState.active || !reorderState.target) {
       reorderState = null;
@@ -1674,8 +1686,18 @@
     });
     const bounds = [];
     for (let i = 0; i < slots.length - 1; i++) {
-      const isSectionEndGap = slots[i].position === 'after' && slots[i].si !== slots[i + 1].si;
-      bounds.push(isSectionEndGap ? lines[i + 1] : (lines[i] + lines[i + 1]) / 2);
+      if (slots[i].sectionDrop) {
+        // 空/折りたたみセクションのスロットは、そのヘッダー行の下端まで
+        // 帯を占有する。これによりヘッダ行のどこにカーソルがあっても
+        // そのセクションが対象になり、直前スロット（通常タスクのafter
+        // endgap＝ヘッダ上端、または直前sectionDropの下端）と連続する(要4, R-G09-03)。
+        bounds.push(slots[i].el.getBoundingClientRect().bottom);
+      } else if (slots[i].position === 'after' && slots[i].si !== slots[i + 1].si) {
+        // #40 endgap: 非最下部セクション末尾へのドロップ帯を確保。
+        bounds.push(lines[i + 1]);
+      } else {
+        bounds.push((lines[i] + lines[i + 1]) / 2);
+      }
     }
 
     for (let i = 0; i < slots.length; i++) {

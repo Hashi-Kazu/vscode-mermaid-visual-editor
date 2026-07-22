@@ -397,6 +397,13 @@ body.label-resizing * {
   z-index: 3000;
 }
 
+/* ドラッグ中、空/折りたたみセクションがドロップ先のときの行強調(要8) */
+.drop-into-section {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: -2px;
+  background: var(--vscode-list-dropBackground, rgba(0, 122, 204, 0.2));
+}
+
 /* ── Disabled menu item ── */
 .menu-item-disabled {
   opacity: 0.4;
