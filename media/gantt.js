@@ -1660,18 +1660,32 @@
     });
     if (slots.length === 0) return null;
 
-    let best = null;
-    let bestDist = Infinity;
-    for (const slot of slots) {
+    // 各スロットの基準ライン（before→行top / after→行bottom）を求め、
+    // 隣接スロット間の境界（ゾーンの区切り）を計算する。
+    // 通常は隣接ライン同士の中点で区切るが、あるセクションの「末尾」
+    // スロット（最終タスクのafter）と次セクションの先頭スロットとの間
+    // （＝セクションヘッダーを含むギャップ）は中点で分割せず、
+    // 次スロット自身のライン位置まで丸ごと手前セクションの「末尾」に
+    // 割り当てる。これにより非最下部セクションでも「末尾」への
+    // ドロップ帯が次セクションのヘッダー領域に潰されず確保される。
+    const lines = slots.map(slot => {
       const rect = slot.el.getBoundingClientRect();
-      const lineY = slot.position === 'after' ? rect.bottom : rect.top;
-      const dist = Math.abs(clientY - lineY);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = slot;
+      return slot.position === 'after' ? rect.bottom : rect.top;
+    });
+    const bounds = [];
+    for (let i = 0; i < slots.length - 1; i++) {
+      const isSectionEndGap = slots[i].position === 'after' && slots[i].si !== slots[i + 1].si;
+      bounds.push(isSectionEndGap ? lines[i + 1] : (lines[i] + lines[i + 1]) / 2);
+    }
+
+    for (let i = 0; i < slots.length; i++) {
+      const upper = i === 0 ? -Infinity : bounds[i - 1];
+      const lower = i === slots.length - 1 ? Infinity : bounds[i];
+      if (clientY > upper && clientY <= lower) {
+        return slots[i];
       }
     }
-    return best;
+    return slots[slots.length - 1];
   }
 
   function findSectionDropTarget(clientY, fromSi) {
