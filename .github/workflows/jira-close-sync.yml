@@ -1,0 +1,51 @@
+name: Jira Close Sync
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+
+jobs:
+  close-jira-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve Jira key
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          comments=$(gh issue view ${{ github.event.issue.number }} --repo ${{ github.repository }} --json comments --jq '.comments[].body')
+          key=$(echo "$comments" | grep -oE 'HSKZ-[0-9]+' | head -1)
+          echo "jira_key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Transition Jira issue to Done
+        if: steps.resolve.outputs.jira_key != ''
+        env:
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_KEY: ${{ steps.resolve.outputs.jira_key }}
+        run: |
+          auth=$(printf '%s:%s' "$JIRA_EMAIL" "$JIRA_API_TOKEN" | base64 -w0)
+          transitions=$(curl -sS --fail-with-body \
+            -H "Authorization: Basic ${auth}" \
+            "https://hashi-kazu.atlassian.net/rest/api/3/issue/${JIRA_KEY}/transitions")
+          transition_id=$(echo "$transitions" | jq -r '.transitions[] | select(.to.statusCategory.key == "done") | .id' | head -1)
+          if [ -z "$transition_id" ]; then
+            echo "::error::Doneカテゴリの遷移が見つかりませんでした: ${JIRA_KEY}"
+            exit 1
+          fi
+          curl -sS --fail-with-body -X POST \
+            -H "Authorization: Basic ${auth}" \
+            -H "Content-Type: application/json" \
+            -d "{\"transition\":{\"id\":\"${transition_id}\"}}" \
+            "https://hashi-kazu.atlassian.net/rest/api/3/issue/${JIRA_KEY}/transitions"
+
+      - name: Comment on GitHub issue
+        if: steps.resolve.outputs.jira_key != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --repo ${{ github.repository }} \
+            --body "✅ Jira課題 ${{ steps.resolve.outputs.jira_key }} を完了ステータスに更新しました"
