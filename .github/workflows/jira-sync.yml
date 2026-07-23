@@ -69,6 +69,56 @@ jobs:
           key=$(echo "$response" | jq -r '.key')
           echo "jira_key=$key" >> "$GITHUB_OUTPUT"
 
+      - name: Append Jira integration rule to issue body
+        if: steps.create.outputs.jira_key != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JIRA_KEY: ${{ steps.create.outputs.jira_key }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          marker='<!-- jira-integration-rule -->'
+
+          body_file=$(mktemp)
+          gh issue view "$ISSUE_NUMBER" --repo "$REPO" --json body --jq '.body // ""' > "$body_file"
+
+          if grep -qF "$marker" "$body_file"; then
+            echo "jira-integration-rule marker already present; skip"
+            exit 0
+          fi
+
+          rule_file=$(mktemp)
+          {
+            echo "$marker"
+            echo ""
+            echo "## Jira連携ルール"
+            echo ""
+            echo "- Jira課題キー: \`${JIRA_KEY}\`"
+            echo ""
+            echo "実装時は、以下にJira課題キー \`${JIRA_KEY}\` を含めること。"
+            echo ""
+            echo "1. ブランチ名"
+            echo "2. すべてのコミットメッセージ"
+            echo "3. Pull Requestタイトル"
+            echo ""
+            echo "例："
+            echo ""
+            echo "- Branch: \`feature/${JIRA_KEY}-issue-${ISSUE_NUMBER}\`"
+            echo "- Commit: \`${JIRA_KEY} feat: 変更内容 (#${ISSUE_NUMBER})\`"
+            echo "- PR: \`${JIRA_KEY} feat: 変更内容\`"
+          } > "$rule_file"
+
+          new_body_file=$(mktemp)
+          {
+            cat "$body_file"
+            echo ""
+            echo ""
+            cat "$rule_file"
+          } > "$new_body_file"
+
+          gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --body-file "$new_body_file"
+
       - name: Comment on GitHub issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

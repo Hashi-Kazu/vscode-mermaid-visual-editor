@@ -35,6 +35,42 @@ jobs:
         issue: ${{ fromJson(needs.discover.outputs.issues) }}
 
     steps:
+      - name: Resolve Jira key and naming
+        id: jira
+        env:
+          ISSUE_BODY: ${{ matrix.issue.body }}
+          ISSUE_TITLE: ${{ matrix.issue.title }}
+          ISSUE_NUMBER: ${{ matrix.issue.number }}
+        run: |
+          set -euo pipefail
+          body_file=$(mktemp)
+          printf '%s' "$ISSUE_BODY" > "$body_file"
+
+          jira_key=$(grep -oE 'Jira課題キー: `HSKZ-[0-9]+`' "$body_file" | grep -oE 'HSKZ-[0-9]+' | head -1)
+
+          if [ -n "$jira_key" ]; then
+            branch_name="feature/${jira_key}-issue-${ISSUE_NUMBER}"
+            commit_example="${jira_key} feat: 変更内容 (#${ISSUE_NUMBER})"
+            pr_title="${jira_key} feat: ${ISSUE_TITLE}"
+          else
+            branch_name="feature/issue-${ISSUE_NUMBER}"
+            commit_example="feat: 変更内容 (#${ISSUE_NUMBER})"
+            pr_title="feat: ${ISSUE_TITLE}"
+          fi
+
+          delim="ghoutput_${RANDOM}${RANDOM}"
+
+          echo "jira_key=${jira_key}" >> "$GITHUB_OUTPUT"
+          echo "branch_name=${branch_name}" >> "$GITHUB_OUTPUT"
+
+          echo "commit_example<<${delim}" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$commit_example" >> "$GITHUB_OUTPUT"
+          echo "${delim}" >> "$GITHUB_OUTPUT"
+
+          echo "pr_title<<${delim}" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "$pr_title" >> "$GITHUB_OUTPUT"
+          echo "${delim}" >> "$GITHUB_OUTPUT"
+
       - name: Select model
         id: model
         run: |
@@ -81,10 +117,14 @@ jobs:
                  - コード修正のみ（バグ修正・リファクタ等、要件変更を伴わない） → パッチアップ
                - 要件変更を行った場合は `docs/requirements-usdm.md` 冒頭の「バージョン」「最終更新」欄と `package.json` の `version` を同じ値に揃える
                - Marketplace は同一バージョンの再公開ができないため、変更内容が些少でも必ずいずれかのアップを行う
-            4. `feature/issue-${{ matrix.issue.number }}` ブランチを作成して変更をコミットする
-               - コミットメッセージは日本語で簡潔に（例: `feat: ○○機能を追加 (#${{ matrix.issue.number }})`）
+            4. `${{ steps.jira.outputs.branch_name }}` ブランチを作成して変更をコミットする
+               - 指定されたブランチ名を変更しないこと
+               - コミットメッセージは日本語で簡潔にする
+               - Issue本文にJira課題キーがある場合は、すべてのコミットメッセージの先頭にJira課題キーを含める
+               - コミットメッセージ例: `${{ steps.jira.outputs.commit_example }}`
             5. main ブランチへの draft PR を作成する
-               - PR タイトル: `feat: ${{ matrix.issue.title }}`
+               - PR タイトル: `${{ steps.jira.outputs.pr_title }}`
+               - 指定されたPRタイトルを変更しないこと
                - PR 本文に変更内容のサマリーと `Closes #${{ matrix.issue.number }}` を含める
 
             ## 注意事項
@@ -105,10 +145,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           NUM: ${{ matrix.issue.number }}
-          TITLE: ${{ matrix.issue.title }}
+          BR: ${{ steps.jira.outputs.branch_name }}
+          PR_TITLE: ${{ steps.jira.outputs.pr_title }}
         run: |
           set -euo pipefail
-          BR="feature/issue-${NUM}"
           # エージェントがブランチを作れていなければ実装未達としてスキップ
           if ! gh api "repos/${REPO}/branches/${BR}" >/dev/null 2>&1; then
             echo "branch ${BR} not found; skip PR creation"
@@ -130,7 +170,7 @@ jobs:
           fi
           # エージェントが手順5(PR作成)を取りこぼした場合の保険として draft PR を作成する
           gh api "repos/${REPO}/pulls" \
-            -f title="feat: ${TITLE}" \
+            -f title="${PR_TITLE}" \
             -f head="${BR}" \
             -f base="main" \
             -f body="$(printf 'Issue #%s の自動実装。\n\nCloses #%s' "${NUM}" "${NUM}")" \
